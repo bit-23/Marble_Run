@@ -1,25 +1,13 @@
-# inisializando a janela do jogo
-
 import pygame
+from jogo import Jogo
 
-pygame.init()
+def main():
+    # Inicializa os componentes principais do Pygame-CE (Áudio, Fontes, Vídeo)
+    pygame.init()
+    
+    # Cria a instância do jogo e inicia o loop principal
+    meu_jogo = Jogo()
+    meu_jogo.rodar()
 
-tela=pygame.display.set_mode((800,600))
-
-AZUL=(0,225,0)
-VERDE=(0,225,225)
-BRANCO=(225,225,225)
-
-rodando=True
-
-while rodando:
-    for evento in pygame.event.get():
-        if evento.type==pygame.QUIT:
-            rodando=False
-    tela.fill(AZUL)
-    pygame.draw.rect(tela,VERDE,(200,200,200,200))
-    pygame.draw.circle(tela,BRANCO,(400,300),120)
-    pygame.draw.line(tela,BRANCO,(100,100),(200,200),3)
-    pygame.display.flip()
-
-pygame.quit()
+if __name__ == "__main__":
+    main()
