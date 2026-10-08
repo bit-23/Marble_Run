@@ -13,4 +13,12 @@ EVN/
 .vscode/
 .idea/
 .DS_Store
+.tests/
+.website/
+.build/
+dist/
+recorde.txt
 '@ | Out-File -FilePath "C:\Users\52522777\WorksMarble\.gitignore" -Encoding utf8
+
+
+
