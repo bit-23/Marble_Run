@@ -1,0 +1,23 @@
+# Ambiente Virtual (NUNCA envie a pasta .venv para o GitHub)
+.venv/
+venv/
+ENV/
+
+# Arquivos temporários do Python e Cache
+
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Arquivos do Sistema Operacional (Linux/Mac/Windows)
+
+.DS_Store
+Thumbs.db
+*.bak
+*.local
+
+# Configurações de editores de código (Opcional)
+
+.vscode/
+.idea/
