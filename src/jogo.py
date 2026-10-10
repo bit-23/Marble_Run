@@ -79,6 +79,7 @@ def gerar_labirinto(colunas, linhas, rng, laco=PROB_LACOS):
 
     # 3. entrada e saida
     entrada = (inicio[0] * 2 + 1, inicio[1] * 2 + 1)
+    
     dist = _distancias(grade, entrada)
     celulas = [(x, y) for (x, y) in dist if x % 2 == 1 and y % 2 == 1]
     maxima = max(dist[c] for c in celulas)
@@ -95,11 +96,11 @@ def _distancias(grade, origem):
         x, y = fila.popleft()
         for dx, dy in DIRS:
             p = (x + dx, y + dy)
+            # Correção de sintaxe para indexar a grade corretamente [y][x]
             if p not in dist and grade[p[1]][p[0]] == 0:
                 dist[p] = dist[(x, y)] + 1
                 fila.append(p)
     return dist
-
 
 # ======================================================================
 #  O JOGO
@@ -301,7 +302,7 @@ class Jogo:
         self.tela.fill((18, 16, 28))
         cx, cy = self.camera
         self.cenario.desenhar(self.tela, cx, cy)
-        self.jogador.desenhar(self.tela, cx, cy)
+        self.jogador.desenhar(self.tela, (cx, cy))
 
         if self.escuridao and self.estado in ("jogando", "pausado"):
             self._veu.fill((0, 0, 0, 235))

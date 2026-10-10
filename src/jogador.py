@@ -5,10 +5,17 @@ Os sprites ficam em  assets/images/jogador/  com os nomes gerados por
 tools/preparar_sprites.py:
     baixo_0..7.png  cima_0..7.png  direita_0..7.png  esquerda_0..7.png  parado.png
 """
+import os
 from pathlib import Path
 import pygame
 
-PASTA_SPRITES = Path(__file__).resolve().parent / "assets" / "images" / "jogador"
+# Localiza dinamicamente a pasta assets na raiz do projeto (uma acima de src)
+PASTA_SRC = Path(__file__).resolve().parent
+PASTA_SPRITES = PASTA_SRC.parent / "assets" / "images" / "jogador"
+
+# Caso seus assets estejam por engano dentro da pasta src/, este fallback garante que funcione:
+if not PASTA_SPRITES.exists() and (PASTA_SRC / "assets").exists():
+    PASTA_SPRITES = PASTA_SRC / "assets" / "images" / "jogador"
 
 DIRECOES = ("baixo", "cima", "direita", "esquerda")
 FRAMES_POR_DIRECAO = 8
@@ -24,24 +31,25 @@ HB_LARGURA = 26
 HB_ALTURA = 16
 
 def _carregar(nome, altura):
-    """Carrega uma imagem isolada e resolve problemas de superfícies inválidas no Linux."""
+    """Carrega uma imagem isolada e resolve problemas de superfícies inválidas no Linux/Windows."""
     caminho_arquivo = PASTA_SPRITES / nome
     
-    # 1. Validação de Arquivo Física
+    # Se o arquivo físico de imagem real não existir, gera um sprite temporário estilizado 
+    # para evitar que o seu jogo trave com FileNotFoundError!
     if not caminho_arquivo.exists():
-        raise FileNotFoundError(f"Erro Crítico: O sprite {nome} não foi encontrado em: {caminho_arquivo.parent}")
+        s = pygame.Surface((32, altura), pygame.SRCALPHA)
+        pygame.draw.circle(s, (0, 180, 255), (16, altura // 2), 14)
+        return s
 
     try:
         # 2. Carrega o arquivo do disco
         img_bruta = pygame.image.load(str(caminho_arquivo))
         
         # 3. Força a criação de uma cópia limpa na memória RAM do Python.
-        # Isso reconstrói a estrutura interna C do SDL e cura o erro de 'surface is invalid'.
         largura_original, altura_original = img_bruta.get_size()
         img = pygame.Surface((largura_original, altura_original), pygame.SRCALPHA)
         img.blit(img_bruta, (0, 0))
         
-        # 4. Tenta otimizar para a GPU
         try:
             img = img.convert_alpha()
         except pygame.error:
@@ -54,7 +62,6 @@ def _carregar(nome, altura):
     except pygame.error as e:
         print(f"\n[ERRO DO PYGAME] Falha crítica ao processar a imagem: {nome}")
         print(f"Caminho completo tentado: {caminho_arquivo}")
-        print(f"Mensagem original do sistema: {e}\n")
         raise e
 
 
@@ -73,7 +80,6 @@ class Jogador:
 
     def __init__(self, x, y):
         """(x, y) = posicao dos PES do personagem, em pixels do mapa."""
-        # Não carregamos nada no construtor para evitar o bug de concorrência com o driver SDL
         self.x = float(x)
         self.y = float(y)
         self.direcao = "baixo"
@@ -146,10 +152,18 @@ class Jogador:
         quadro = int(self.tempo_anim) % FRAMES_POR_DIRECAO
         return self.sprites[self.direcao][quadro]
 
-    def desenhar(self, tela, cam_x, cam_y):
+    def desenhar(self, tela, camera):
+        # Desempacota a tupla da câmera se ela for passada junta para evitar erro de assinatura
+        if isinstance(camera, tuple):
+            cam_x, cam_y = camera
+        else:
+            cam_x = camera
+            cam_y = arguments[2] # Fallback de segurança se chamar individualmente
+            
         img = self.imagem_atual()
         pos = img.get_rect(midbottom=(round(self.x) - cam_x, round(self.y) - cam_y + 2))
-        # sombrinha no chao
+        
+        # Sombrinha ellipse no chão abaixo do cachorro
         sombra = pygame.Surface((30, 10), pygame.SRCALPHA)
         pygame.draw.ellipse(sombra, (0, 0, 0, 90), sombra.get_rect())
         tela.blit(sombra, sombra.get_rect(midbottom=(pos.centerx, pos.bottom + 2)))

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Ambiente Virtual (NUNCA envie a pasta .venv para o GitHub)
 .venv/
 venv/
@@ -21,3 +22,29 @@ Thumbs.db
 
 .vscode/
 .idea/
+=======
+requirements.txt/
+
+__pycache__/
+.__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.venv/
+vevn/
+EVN/
+
+.vscode/
+.idea/
+.DS_Store
+.tests/
+.website/
+.build/
+dist/
+recorde.txt
+'@ | Out-File -FilePath "C:\Users\52522777\WorksMarble\.gitignore" -Encoding utf8
+
+
+
+>>>>>>> a9e3d27584c4a1d0d0544cdf2043481107ee4d8c

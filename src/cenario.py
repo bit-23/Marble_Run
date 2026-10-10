@@ -104,6 +104,14 @@ class Cenario:
         return r
 
     # ------------------------------------------------------------------
+    # Checagem de saída (adicionado para compatibilidade com o jogo.py)
+    # ------------------------------------------------------------------
+    def checar_saida(self, x, y):
+        """Retorna True se a posição (x, y) colidir com o retângulo de saída."""
+        r_saida = self.rect_saida()
+        return r_saida.collidepoint(x, y)
+
+    # ------------------------------------------------------------------
     # Atualizacao / desenho
     # ------------------------------------------------------------------
     def atualizar(self, dt):

@@ -156,11 +156,19 @@ class GerenciadorSom:
         if self.ativo and not self.mudo and nome in self.efeitos:
             self.efeitos[nome].play()
 
+    def tocar_efeito(self, nome):
+        """Redireciona para tocar() para manter compatibilidade."""
+        self.tocar(nome)
+
     def iniciar_musica(self):
         if self.ativo and self.musica and self.canal_musica is None:
             self.canal_musica = self.musica.play(loops=-1)
             if self.mudo and self.canal_musica:
                 self.canal_musica.pause()
+
+    def tocar_musica(self, nome_arquivo=None, loops=-1, volume=0.35):
+        """Redireciona para iniciar_musica() para manter compatibilidade."""
+        self.iniciar_musica()
 
     def alternar_mudo(self):
         self.mudo = not self.mudo
@@ -169,3 +177,8 @@ class GerenciadorSom:
                 self.canal_musica.pause()
             else:
                 self.canal_musica.unpause()
+
+    def parar_musica(self):
+        if self.canal_musica:
+            self.canal_musica.stop()
+            self.canal_musica = None
