@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .contratos import OuvinteDaPartida, RepositorioDeRecorde
+from .contratos import OuvinteDaPartida, RepositorioDePontuacao, RepositorioDeRecorde
 
 
 @dataclass(frozen=True)
@@ -140,3 +140,16 @@ class Recorde(OuvinteDaPartida):
 
     def ao_esgotar_tempo(self, fase_alcancada: int) -> None:
         self.registrar(fase_alcancada)
+
+
+class PontuacaoDoJogador(OuvinteDaPartida):
+    """Persiste a melhor pontuacao do jogador ao concluir cada fase."""
+
+    def __init__(self, jogador: str, repositorio: RepositorioDePontuacao) -> None:
+        self._jogador = jogador
+        self._repositorio = repositorio
+        self._pontos = 0
+
+    def ao_concluir_fase(self, resultado: ResultadoDaFase) -> None:
+        self._pontos += resultado.pontos_ganhos
+        self._repositorio.salvar_melhor(self._jogador, self._pontos, resultado.fase)

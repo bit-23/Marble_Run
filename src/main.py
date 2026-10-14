@@ -16,7 +16,7 @@ import sys
 import pygame
 
 from marble_run.apresentacao.cena import FabricaDeCenas
-from marble_run.apresentacao.entrada import ControleTeclado, MapaDeTeclas
+from marble_run.apresentacao.entrada import ControleHibrido, MapaDeTeclas
 from marble_run.apresentacao.interface import Hud, Painel, Tipografia
 from marble_run.apresentacao.jogo import Aplicacao, Jogo
 from marble_run.apresentacao.personagem import SpritesDoJogador
@@ -27,7 +27,7 @@ from marble_run.dominio.geradores import GeradorBacktracker
 from marble_run.dominio.partida import FabricaDeFases
 from marble_run.dominio.regras import Dificuldade, Recorde
 from marble_run.infraestrutura.audio import FabricaDeAudio
-from marble_run.infraestrutura.persistencia import RecordeEmArquivo
+from marble_run.infraestrutura.persistencia import PontuacoesEmSQLite, RecordeEmArquivo
 from marble_run.infraestrutura.recursos import LocalizadorDeRecursos
 
 LARGURA, ALTURA = 960, 640
@@ -43,6 +43,7 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
     # Infraestrutura: detalhes tecnicos escondidos atras de contratos
     audio = FabricaDeAudio.criar(recursos.pasta_sons)  # AudioPygame ou AudioMudo
     recorde = Recorde(RecordeEmArquivo(recursos.arquivo_recorde))
+    pontuacoes = PontuacoesEmSQLite(recursos.arquivo_pontuacoes)
 
     # Dominio: regras puras, montadas por composicao
     temas = CatalogoDeTemas.padrao()
@@ -58,9 +59,10 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
         painel=Painel(tipografia, tamanho),
         cenas=FabricaDeCenas(temas, sprites, tamanho),
         sprites=sprites,
-        controle=ControleTeclado(),
+        controle=ControleHibrido(),
         passos=RitmoDePassos(audio),
         recorde=recorde,
+        pontuacoes=pontuacoes,
         preferencias=Preferencias(),
     )
     return Jogo(servicos, fases,

@@ -54,3 +54,15 @@ class RepositorioDeRecorde(ABC):
     @abstractmethod
     def salvar(self, fase: int) -> None:
         """Guarda a nova melhor fase."""
+
+
+class RepositorioDePontuacao(ABC):
+    """Armazena a melhor pontuacao de cada jogador."""
+
+    @abstractmethod
+    def carregar_melhor(self, jogador: str) -> tuple[int, int]:
+        """Devolve (pontos, fase) ou (0, 0) se ainda nao houver pontuacao."""
+
+    @abstractmethod
+    def salvar_melhor(self, jogador: str, pontos: int, fase: int) -> None:
+        """Guarda a pontuacao quando superar o recorde do jogador."""

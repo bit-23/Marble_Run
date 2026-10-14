@@ -16,6 +16,7 @@ import pygame
 
 from ..dominio.contratos import OuvinteDaPartida
 from ..dominio.partida import FabricaDeFases, Partida
+from ..dominio.regras import PontuacaoDoJogador
 from .contratos import ServicoAudio
 from .entrada import Acao, MapaDeTeclas
 from .estados import ContextoDoJogo, Estado, EstadoMenu
@@ -31,6 +32,7 @@ class Jogo(ContextoDoJogo):
         self._ouvintes = tuple(ouvintes)
         self._audio = audio
         self._teclas = teclas
+        self._nome_jogador = ""
         self._encerrado = False
         self._estado: Estado = EstadoMenu(self)
 
@@ -42,12 +44,23 @@ class Jogo(ContextoDoJogo):
         return self._servicos
 
     def mudar_estado(self, estado: Estado) -> None:
+        if isinstance(self._estado, EstadoMenu) and not isinstance(estado, EstadoMenu):
+            pygame.key.stop_text_input()
         self._estado = estado
+
+    @property
+    def nome_jogador(self) -> str:
+        return self._nome_jogador
+
+    def definir_nome_jogador(self, nome: str) -> None:
+        self._nome_jogador = nome[:16]
 
     def nova_partida(self) -> Partida:
         partida = Partida(self._fases)
         for ouvinte in self._ouvintes:
             partida.inscrever(ouvinte)
+        partida.inscrever(PontuacaoDoJogador(
+            self._nome_jogador.strip() or "Jogador", self._servicos.pontuacoes))
         return partida
 
     def encerrar(self) -> None:
@@ -71,11 +84,18 @@ class Jogo(ContextoDoJogo):
         if evento.type == pygame.QUIT:
             self.encerrar()
             return
+        self._servicos.controle.tratar_evento(evento)
+        self._estado.tratar_evento(evento)
+        if (isinstance(self._estado, EstadoMenu) and evento.type == pygame.KEYDOWN
+                and evento.key == pygame.K_SPACE):
+            return  # espaco pode fazer parte do nome; ENTER inicia a partida
         acao = self._teclas.traduzir(evento)
         if acao is Acao.ALTERNAR_SOM:
-            self._audio.alternar_mudo()
+            if not isinstance(self._estado, EstadoMenu):
+                self._audio.alternar_mudo()
         elif acao is Acao.ALTERNAR_LUZ:
-            self._servicos.preferencias.alternar_escuridao()
+            if not isinstance(self._estado, EstadoMenu):
+                self._servicos.preferencias.alternar_escuridao()
         elif acao is not None:
             self._estado.executar(acao)
 

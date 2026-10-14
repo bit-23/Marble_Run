@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..dominio.contratos import RepositorioDePontuacao
 from ..dominio.regras import Recorde
 from .cena import FabricaDeCenas
 from .contratos import Controle
@@ -42,4 +43,5 @@ class ServicosDoJogo:
     controle: Controle
     passos: RitmoDePassos
     recorde: Recorde
+    pontuacoes: RepositorioDePontuacao
     preferencias: Preferencias

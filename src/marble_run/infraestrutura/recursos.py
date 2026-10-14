@@ -1,5 +1,5 @@
 """
-recursos.py - ONDE ficam os arquivos do jogo (sprites, sons, recorde).
+recursos.py - ONDE ficam os arquivos do jogo (sprites, sons, recorde e pontuacoes).
 
 Antes cada modulo calculava seus caminhos com Path(__file__) e tinha seus
 proprios "fallbacks". Agora existe um unico responsavel por isso -
@@ -36,6 +36,11 @@ class LocalizadorDeRecursos:
     @property
     def arquivo_recorde(self) -> Path:
         return self._pasta_src / "recorde.txt"
+
+    @property
+    def arquivo_pontuacoes(self) -> Path:
+        """Local persistente do jogador, independente da pasta do executavel."""
+        return Path.home() / ".marble_run" / "pontuacoes.sqlite3"
 
     @staticmethod
     def _primeira_existente(*candidatas: Path) -> Path:

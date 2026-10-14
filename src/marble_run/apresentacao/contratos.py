@@ -3,8 +3,8 @@ contratos.py - Interfaces que a apresentacao usa, sem saber quem as implementa.
 
 * ServicoAudio: a apresentacao pede "toque a vitoria"; quem toca de verdade
   (pygame.mixer ou ninguem, se nao houver placa de som) e decidido no main.py.
-* Controle: de onde vem a intencao de movimento (teclado hoje; joystick,
-  IA ou um roteiro de testes amanha) - Aberto/Fechado.
+* Controle: de onde vem a intencao de movimento (teclado e gamepad) -
+  Aberto/Fechado.
 """
 from __future__ import annotations
 
@@ -38,3 +38,6 @@ class Controle(ABC):
     @abstractmethod
     def direcao_desejada(self) -> Vetor2:
         """Para onde o jogador quer andar agora (Vetor2 nulo = parado)."""
+
+    def tratar_evento(self, evento: object) -> None:
+        """Recebe eventos de conexao de controle, se a implementacao precisar."""

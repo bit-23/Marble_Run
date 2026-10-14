@@ -37,6 +37,13 @@ class ContextoDoJogo(ABC):
     @abstractmethod
     def servicos(self) -> ServicosDoJogo: ...
 
+    @property
+    @abstractmethod
+    def nome_jogador(self) -> str: ...
+
+    @abstractmethod
+    def definir_nome_jogador(self, nome: str) -> None: ...
+
     @abstractmethod
     def mudar_estado(self, estado: Estado) -> None: ...
 
@@ -60,6 +67,9 @@ class Estado(ABC):
     def executar(self, acao: Acao) -> None:
         """Reage a uma acao do jogador. Padrao: ignora."""
 
+    def tratar_evento(self, evento: pygame.event.Event) -> None:
+        """Recebe eventos especificos da tela antes do mapeamento de acoes."""
+
     def atualizar(self, dt: float) -> None:
         """Avanca a logica da tela. Padrao: nada muda."""
 
@@ -76,9 +86,28 @@ class EstadoMenu(Estado):
         parado = self._servicos.sprites.parado
         self._mascote = pygame.transform.scale(parado, (parado.get_width() * 3, parado.get_height() * 3))
         self._tempo = 0.0
+        self._nome_jogador = jogo.nome_jogador
+        self._melhor_pontuacao = self._carregar_melhor_pontuacao()
+        pygame.key.start_text_input()
+
+    def tratar_evento(self, evento: pygame.event.Event) -> None:
+        if evento.type == pygame.TEXTINPUT:
+            texto = "".join(caractere for caractere in evento.text if caractere.isprintable())
+            self._nome_jogador = (self._nome_jogador + texto)[:16]
+            self._jogo.definir_nome_jogador(self._nome_jogador)
+            self._melhor_pontuacao = self._carregar_melhor_pontuacao()
+        elif evento.type == pygame.KEYDOWN and evento.key == pygame.K_BACKSPACE:
+            self._nome_jogador = self._nome_jogador[:-1]
+            self._jogo.definir_nome_jogador(self._nome_jogador)
+            self._melhor_pontuacao = self._carregar_melhor_pontuacao()
+
+    def _carregar_melhor_pontuacao(self) -> int:
+        nome = self._nome_jogador.strip() or "Jogador"
+        return self._servicos.pontuacoes.carregar_melhor(nome)[0]
 
     def executar(self, acao: Acao) -> None:
         if acao is Acao.CONFIRMAR:
+            self._jogo.definir_nome_jogador(self._nome_jogador.strip() or "Jogador")
             self._jogo.mudar_estado(EstadoJogando.nova_corrida(self._jogo))
         elif acao is Acao.VOLTAR:
             self._jogo.encerrar()
@@ -95,11 +124,17 @@ class EstadoMenu(Estado):
         escrever(tela, "Escape do labirinto antes que o tempo acabe!", Fonte.MEDIA, (220, 220, 235),
                  centro=(cx, 175))
         tela.blit(self._mascote, self._mascote.get_rect(center=(cx, 340)))
+        escrever(tela, f"Jogador: {self._nome_jogador or 'digite seu nome'}", Fonte.MEDIA,
+                 (220, 220, 235), centro=(cx, 455))
         if int(self._tempo / self.PISCA_A_CADA) % 2 == 0:
-            escrever(tela, "Pressione ENTER para jogar", Fonte.GRANDE, VERDE_CLARO, centro=(cx, 500))
-        escrever(tela, "WASD / Setas: mover   P: pausar   L: luz   M: som   ESC: sair",
-                 Fonte.PEQUENA, (150, 150, 180), centro=(cx, 560))
-        escrever(tela, f"Recorde: fase {s.recorde.melhor_fase}", Fonte.MEDIA, DOURADO, centro=(cx, 600))
+            escrever(tela, "Digite seu nome e pressione ENTER ou botao de baixo", Fonte.MEDIA,
+                     VERDE_CLARO, centro=(cx, 505))
+        escrever(tela, "Backspace: apagar   |   Mover: WASD, setas, analogico ou direcional",
+                 Fonte.PEQUENA, (150, 150, 180), centro=(cx, 550))
+        escrever(tela, "Botao de baixo: confirmar   |   da direita: voltar   |   Start: pausar",
+                 Fonte.PEQUENA, (150, 150, 180), centro=(cx, 578))
+        escrever(tela, f"Recorde fase: {s.recorde.melhor_fase}   |   Pontos salvos: {self._melhor_pontuacao}",
+                 Fonte.PEQUENA, DOURADO, centro=(cx, 614))
 
 
 # ======================================================================
@@ -153,7 +188,9 @@ class EstadoPausado(Estado):
 
     def desenhar(self, tela: pygame.Surface) -> None:
         self._jogando.desenhar(tela)
-        self._servicos.painel.desenhar(tela, "PAUSADO", "ESC/ENTER continua   |   Q volta ao menu")
+        self._servicos.painel.desenhar(
+            tela, "PAUSADO", "ESC/ENTER ou botoes de baixo/direita continua",
+            "Q/Select volta ao menu")
 
 
 # ======================================================================
@@ -207,4 +244,4 @@ class EstadoDerrota(Estado):
             tela, "TEMPO ESGOTADO!",
             f"Voce chegou a fase {p.nivel}  |  Pontos: {p.pontos}  |  "
             f"Recorde: fase {self._servicos.recorde.melhor_fase}",
-            "ENTER = gerar um NOVO labirinto")
+            "A/ENTER: reiniciar   |   B: menu")
