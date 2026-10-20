@@ -5,7 +5,7 @@ Polimorfismo: o Cenario so chama `clima.atualizar()` e `clima.desenhar()`.
 Ele nao sabe (nem pergunta) se esta nevando - antes havia um
 "if tema['neve']" no meio do desenho.
 
-    CeuLimpo | Nevasca (gelo) | Brasas (fogo) | Ventania (vento) | Poeira (terra)
+    CeuLimpo | Nevasca (gelo) | Brasas (fogo) | SolEscaldante (deserto) | Ventania (vento) | Poeira (terra)
 """
 from __future__ import annotations
 
@@ -329,3 +329,77 @@ class Poeira(Clima):
                            for _ in range(self._quantidade)]
         for grao in self._graos:
             grao.desenhar(tela, camera, largura, altura, self._tempo)
+
+
+# ======================================================================
+#  Deserto
+# ======================================================================
+class _GraoDeAreia:
+    """Grao de areia levado pela brisa quente, rente ao chao."""
+
+    __slots__ = ("_x", "_y", "_profundidade", "_fase")
+
+    def __init__(self, x: float, y: float, profundidade: float, fase: float) -> None:
+        self._x = x
+        self._y = y
+        self._profundidade = profundidade
+        self._fase = fase
+
+    def soprar(self, tempo: float, dt: float) -> None:
+        prof = self._profundidade
+        self._x += (35 + 55 * prof) * dt
+        self._y += 8 * math.sin(tempo * 1.3 + self._fase) * prof * dt
+
+    def desenhar(self, tela: pygame.Surface, camera: Deslocamento, largura: int, altura: int) -> None:
+        prof = self._profundidade
+        paralaxe = 1.0 + 0.6 * prof
+        sx = int(self._x - camera[0] * paralaxe) % largura
+        sy = int(self._y - camera[1] * paralaxe) % altura
+        k = 0.5 + 0.5 * prof
+        cor = (int(200 * k + 40), int(165 * k + 30), int(105 * k + 20))
+        if prof > 0.75:
+            pygame.draw.line(tela, cor, (sx - 3, sy), (sx, sy), 1)
+        else:
+            tela.set_at((sx, sy), cor)
+
+
+class SolEscaldante(Clima):
+    """Sol forte no deserto: clarao quente no canto da tela e areia voando baixinho."""
+
+    def __init__(self, graos: int = 110, aleatorio: random.Random | None = None) -> None:
+        self._qtd_graos = graos
+        self._aleatorio = aleatorio
+        self._graos: list[_GraoDeAreia] = []  # criados no 1o desenho (precisa do tamanho da tela)
+        self._clarao: pygame.Surface | None = None
+        self._tempo = 0.0
+
+    def atualizar(self, dt: float) -> None:
+        self._tempo += dt
+        for grao in self._graos:
+            grao.soprar(self._tempo, dt)
+
+    def desenhar(self, tela: pygame.Surface, camera: Deslocamento) -> None:
+        largura, altura = tela.get_size()
+        if not self._graos:
+            rng = self._aleatorio if self._aleatorio is not None else random.Random()
+            self._graos = [_GraoDeAreia(rng.uniform(0, largura), rng.uniform(0, altura),
+                                        rng.uniform(0.3, 1.0), rng.uniform(0, math.tau))
+                           for _ in range(self._qtd_graos)]
+            self._clarao = self._criar_clarao(min(largura, altura) // 2)
+        r = self._clarao.get_width() // 2
+        pulso = 0.85 + 0.15 * math.sin(self._tempo * 1.5)
+        clarao = self._clarao
+        if pulso < 0.99:
+            clarao = clarao.copy()
+            clarao.fill((int(255 * pulso),) * 3, special_flags=pygame.BLEND_RGB_MULT)
+        tela.blit(clarao, (largura - r - 40, -r + 40), special_flags=pygame.BLEND_RGB_ADD)
+        for grao in self._graos:
+            grao.desenhar(tela, camera, largura, altura)
+
+    @staticmethod
+    def _criar_clarao(raio: int) -> pygame.Surface:
+        s = pygame.Surface((raio * 2, raio * 2))
+        for r in range(raio, 0, -3):
+            k = (1 - r / raio) ** 2.2
+            pygame.draw.circle(s, (int(110 * k), int(85 * k), int(40 * k)), (raio, raio), r)
+        return s

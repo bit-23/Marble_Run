@@ -72,23 +72,37 @@ class SpritesDoJogador:
 
 class AnimacaoDoJogador:
     QUADROS_POR_SEGUNDO = 12
+    GIROS_POR_SEGUNDO = 14  # deslizando no gelo: gira olhando para todos os lados
+    ALTURA_DO_PULO = 46     # pixels do ponto mais alto do arco da mola
+    ORDEM_DO_GIRO = (Direcao.BAIXO, Direcao.ESQUERDA, Direcao.CIMA, Direcao.DIREITA)
 
     def __init__(self, sprites: SpritesDoJogador) -> None:
         self._sprites = sprites
         self._tempo = 0.0
+        self._giro = 0.0
+        self._girando = False
         self._sombra = pygame.Surface((30, 10), pygame.SRCALPHA)
         pygame.draw.ellipse(self._sombra, (0, 0, 0, 90), self._sombra.get_rect())
 
-    def atualizar(self, dt: float, andando: bool) -> None:
+    def atualizar(self, dt: float, andando: bool, girando: bool = False) -> None:
         self._tempo = self._tempo + dt * self.QUADROS_POR_SEGUNDO if andando else 0.0
+        self._girando = girando
+        self._giro = self._giro + dt * self.GIROS_POR_SEGUNDO if girando else 0.0
 
     def imagem(self, jogador: Jogador) -> pygame.Surface:
+        if self._girando:
+            return self._sprites.quadro(self.ORDEM_DO_GIRO[int(self._giro) % 4], 0)
         if not jogador.esta_andando and jogador.direcao is Direcao.BAIXO:
             return self._sprites.parado
         return self._sprites.quadro(jogador.direcao, int(self._tempo))
 
     def desenhar(self, tela: pygame.Surface, jogador: Jogador, camera: Deslocamento) -> None:
         img = self.imagem(jogador)
-        pos = img.get_rect(midbottom=(round(jogador.x) - camera[0], round(jogador.y) - camera[1] + 2))
-        tela.blit(self._sombra, self._sombra.get_rect(midbottom=(pos.centerx, pos.bottom + 2)))
-        tela.blit(img, pos)
+        altura = round(jogador.altura_do_salto * self.ALTURA_DO_PULO)
+        chao = (round(jogador.x) - camera[0], round(jogador.y) - camera[1] + 2)
+        sombra = self._sombra
+        if altura:  # no ar: sombra menor la embaixo
+            k = 1 - 0.5 * jogador.altura_do_salto
+            sombra = pygame.transform.scale(self._sombra, (round(30 * k), round(10 * k)))
+        tela.blit(sombra, sombra.get_rect(midbottom=(chao[0], chao[1] + 2)))
+        tela.blit(img, img.get_rect(midbottom=(chao[0], chao[1] - altura)))

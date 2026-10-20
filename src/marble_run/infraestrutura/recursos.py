@@ -42,6 +42,10 @@ class LocalizadorDeRecursos:
         """Local persistente do jogador, independente da pasta do executavel."""
         return Path.home() / ".marble_run" / "pontuacoes.sqlite3"
 
+    @property
+    def arquivo_preferencias(self) -> Path:
+        return Path.home() / ".marble_run" / "config.json"
+
     @staticmethod
     def _primeira_existente(*candidatas: Path) -> Path:
         return next((pasta for pasta in candidatas if pasta.exists()), candidatas[-1])

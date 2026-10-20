@@ -1,15 +1,15 @@
 """
-temas.py - A "pele" visual das fases (masmorra, gelo, fogo, vento, terra).
+temas.py - A "pele" visual das fases (masmorra, gelo, fogo, deserto, vento, terra).
 
 Antes cada tema era um dicionario de cores e o desenho tinha
 "if tema['estilo'] == 'gelo'" no meio. Agora vale COMPOSICAO SOBRE HERANCA:
 um Tema nao e uma subclasse - e a combinacao de uma Paleta com tres
 estrategias (Strategy):
-    EstiloDeParede  -> ParedeDeTijolos | ParedeDeGelo | ParedeVulcanica | ParedeDeNuvens | ParedeDeTerra
-    DetalheDePiso   -> PisoLiso        | PisoTrincado | PisoDeBrasas    | PisoDeEspirais | PisoDePedrinhas
-    Clima           -> CeuLimpo        | Nevasca      | Brasas          | Ventania       | Poeira  (clima.py)
-Um tema novo (deserto, lava...) e so uma nova combinacao dessas pecas,
-registrada no CatalogoDeTemas - nenhuma outra classe muda (Aberto/Fechado).
+    EstiloDeParede  -> ParedeDeTijolos | ParedeDeGelo | ParedeVulcanica | ParedeDeArenito | ParedeDeNuvens | ParedeDeTerra
+    DetalheDePiso   -> PisoLiso        | PisoTrincado | PisoDeBrasas    | PisoDeDunas     | PisoDeEspirais | PisoDePedrinhas
+    Clima           -> CeuLimpo        | Nevasca      | Brasas          | SolEscaldante   | Ventania       | Poeira  (clima.py)
+Um tema novo e so uma nova combinacao dessas pecas, registrada no
+CatalogoDeTemas - nenhuma outra classe muda (Aberto/Fechado).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from typing import Callable, Iterable
 
 import pygame
 
-from .clima import Brasas, CeuLimpo, Clima, Nevasca, Poeira, Ventania
+from .clima import Brasas, CeuLimpo, Clima, Nevasca, Poeira, SolEscaldante, Ventania
 
 Cor = tuple[int, int, int]
 
@@ -187,6 +187,39 @@ class ParedeDeNuvens(EstiloDeParede):
             x += rng.randint(16, 24)
 
 
+class ParedeDeArenito(EstiloDeParede):
+    """Blocos de arenito com camadas (estratos) de areia, buraquinhos da erosao e areia escorrendo."""
+
+    def __init__(self, camadas: tuple[Cor, ...]) -> None:
+        self._camadas = camadas
+
+    def pintar_topo(self, tamanho: int, paleta: Paleta) -> pygame.Surface:
+        rng = random.Random(tamanho)  # topo e face precisam sair iguais
+        s = pygame.Surface((tamanho, tamanho))
+        s.fill(paleta.parede)
+        y = 0
+        while y < tamanho:  # faixas onduladas de areia compactada
+            altura = rng.randint(5, 9)
+            cor = rng.choice(self._camadas)
+            pontos = [(x, y + round(2 * math.sin(x * 0.25 + y))) for x in range(0, tamanho + 4, 4)]
+            pygame.draw.lines(s, cor, False, pontos, altura)
+            pygame.draw.lines(s, paleta.junta, False, [(x, py + altura // 2) for x, py in pontos], 1)
+            y += altura + rng.randint(2, 5)
+        for _ in range(6):  # buraquinhos da erosao
+            x, y = rng.randrange(3, tamanho - 3), rng.randrange(3, tamanho - 3)
+            pygame.draw.circle(s, paleta.junta, (x, y), rng.randint(1, 2))
+        return s
+
+    def detalhar_face(self, face: pygame.Surface, tamanho: int, rng: random.Random) -> None:
+        topo = tamanho - ALTURA_FACE + 1
+        for i, y in enumerate(range(topo + 3, tamanho, 4)):  # estratos na face
+            pygame.draw.line(face, self._camadas[i % len(self._camadas)], (0, y), (tamanho, y), 1)
+        x = rng.randint(2, 8)
+        while x < tamanho - 3:  # areia escorrendo
+            pygame.draw.line(face, self._camadas[0], (x, topo), (x, topo + rng.randint(3, 8)), 2)
+            x += rng.randint(9, 16)
+
+
 class ParedeDeTerra(EstiloDeParede):
     """Barro batido com pedras encravadas, musgo na borda e raizes na face."""
 
@@ -295,6 +328,37 @@ class PisoDeEspirais(DetalheDePiso):
         pontos = [(cx + (1 + i * 0.45) * math.cos(i * 0.35), cy + (1 + i * 0.45) * math.sin(i * 0.35))
                   for i in range(26)]
         pygame.draw.lines(piso, self._cor, False, pontos, 1)
+
+
+class PisoDeDunas(DetalheDePiso):
+    """Areia com ondinhas de vento; de vez em quando um cactinho ou ossinho no canto."""
+
+    def __init__(self, onda: Cor, cacto: Cor, osso: Cor) -> None:
+        self._onda = onda
+        self._cacto = cacto
+        self._osso = osso
+
+    def aplicar(self, piso: pygame.Surface, variacao: int, tamanho: int, rng: random.Random) -> None:
+        t = tamanho
+        for y in range(8 + variacao * 3, t - 4, 11):  # ondulacoes deixadas pelo vento
+            pontos = [(x, y + round(2 * math.sin(x * 0.2 + variacao))) for x in range(2, t - 1, 3)]
+            pygame.draw.lines(piso, self._onda, False, pontos, 1)
+        if variacao == 1:  # cactinho no canto (decoracao, nao bloqueia)
+            x, y = rng.randrange(8, 14), rng.randrange(t - 24, t - 18)
+            escuro = tuple(max(0, v - 45) for v in self._cacto)
+            pygame.draw.rect(piso, escuro, (x + 1, y + 1, 6, 16), border_radius=3)
+            pygame.draw.rect(piso, self._cacto, (x, y, 6, 16), border_radius=3)
+            pygame.draw.rect(piso, self._cacto, (x - 5, y + 4, 4, 6), border_radius=2)
+            pygame.draw.rect(piso, self._cacto, (x - 5, y + 8, 6, 3))
+            pygame.draw.rect(piso, self._cacto, (x + 7, y + 2, 4, 6), border_radius=2)
+            pygame.draw.rect(piso, self._cacto, (x + 5, y + 6, 5, 3))
+            pygame.draw.line(piso, escuro, (x + 3, y + 2), (x + 3, y + 14), 1)
+        elif variacao == 3:  # ossinho
+            x, y = rng.randrange(t - 22, t - 14), rng.randrange(8, 16)
+            pygame.draw.line(piso, self._osso, (x, y), (x + 8, y + 3), 2)
+            for px, py in ((x, y), (x + 8, y + 3)):
+                pygame.draw.circle(piso, self._osso, (px, py - 1), 2)
+                pygame.draw.circle(piso, self._osso, (px, py + 1), 2)
 
 
 class PisoDePedrinhas(DetalheDePiso):
@@ -467,6 +531,22 @@ def criar_tema_terra() -> Tema:
     )
 
 
+def criar_tema_deserto() -> Tema:
+    return Tema(
+        "deserto",
+        Paleta(fundo=(34, 22, 12),
+               pisos=((158, 124, 80), (164, 129, 84), (152, 119, 76), (161, 126, 82)),
+               parede=(226, 186, 128), junta=(178, 134, 84),
+               face=(170, 122, 72), face_linha=(248, 216, 162),
+               entrada=(120, 200, 90),
+               portal_aro=(90, 200, 230), portal_miolo=(205, 245, 255),  # um oasis no fim do labirinto
+               brilho=(90, 190, 255)),
+        parede=ParedeDeArenito(camadas=((236, 198, 140), (214, 170, 112), (232, 186, 124))),
+        piso=PisoDeDunas(onda=(140, 108, 68), cacto=(96, 156, 76), osso=(236, 228, 210)),
+        clima=SolEscaldante,
+    )
+
+
 class CatalogoDeTemas:
     """Registro dos temas disponiveis; o sorteio entre eles e feito pelo dominio."""
 
@@ -475,7 +555,7 @@ class CatalogoDeTemas:
 
     @classmethod
     def padrao(cls) -> CatalogoDeTemas:
-        return cls([criar_tema_masmorra(), criar_tema_gelo(), criar_tema_fogo(),
+        return cls([criar_tema_masmorra(), criar_tema_gelo(), criar_tema_fogo(), criar_tema_deserto(),
                     criar_tema_vento(), criar_tema_terra()])
 
     @property

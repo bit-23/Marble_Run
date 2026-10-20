@@ -2,28 +2,32 @@
 partida.py - Fase, fabrica de fases e a Partida (corrida estilo roguelike).
 
 Fluxo:  fase 1 -> (achou a saida) -> fase 2 (maior, menos tempo, menos luz)
-                -> (tempo acabou)  -> fim da partida; ENTER = REBOOT com
-                                      labirinto totalmente novo, de volta a fase 1.
+                -> ... o MAPA (tema) so muda a cada 3 fases (1-3, 4-6, 7-9...)
+                -> (tempo acabou ou coracoes acabaram) -> fim da partida; ENTER = REBOOT
+                   com labirinto totalmente novo, de volta a fase 1.
 """
 from __future__ import annotations
 
 import random
 from enum import Enum, auto
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
+from .ambiente import Ambiente, Ocorrencia, TipoDeItem
+from .biomas import Bioma
 from .contratos import OuvinteDaPartida
 from .geometria import Vetor2
 from .geradores import GeradorDeLabirinto
-from .jogador import Jogador
+from .jogador import Direcao, Jogador
 from .labirinto import Labirinto
-from .regras import Cronometro, Dificuldade, Placar, ResultadoDaFase
+from .regras import Cronometro, Dificuldade, Placar, ResultadoDaFase, Vida
 
 
 class Fase:
-    """Um labirinto jogavel: mapa + jogador + cronometro (+ dados para exibir)."""
+    """Um labirinto jogavel: mapa + jogador + cronometro + ambiente (itens/perigos)."""
 
     def __init__(self, numero: int, semente: int, tema: str, labirinto: Labirinto,
-                 jogador: Jogador, cronometro: Cronometro, raio_visao: float) -> None:
+                 jogador: Jogador, cronometro: Cronometro, raio_visao: float,
+                 ambiente: Ambiente | None = None, etapa_no_mapa: int = 1, fases_por_mapa: int = 1) -> None:
         self._numero = numero
         self._semente = semente
         self._tema = tema
@@ -31,6 +35,10 @@ class Fase:
         self._jogador = jogador
         self._cronometro = cronometro
         self._raio_visao = raio_visao
+        self._ambiente = ambiente if ambiente is not None else Ambiente(labirinto)
+        self._etapa_no_mapa = etapa_no_mapa
+        self._fases_por_mapa = fases_por_mapa
+        self._pendentes: list[Ocorrencia] = []
 
     @property
     def numero(self) -> int:
@@ -46,6 +54,20 @@ class Fase:
         return self._tema
 
     @property
+    def etapa_no_mapa(self) -> int:
+        """Ex.: 2 = segunda fase seguida neste mapa."""
+        return self._etapa_no_mapa
+
+    @property
+    def fases_por_mapa(self) -> int:
+        return self._fases_por_mapa
+
+    @property
+    def ultima_no_mapa(self) -> bool:
+        """Depois desta, o mapa muda."""
+        return self._etapa_no_mapa >= self._fases_por_mapa
+
+    @property
     def labirinto(self) -> Labirinto:
         return self._labirinto
 
@@ -55,7 +77,12 @@ class Fase:
 
     @property
     def raio_visao(self) -> float:
+        """Alcance BASE da luz, em tiles (lanterna e apagao mudam via ambiente)."""
         return self._raio_visao
+
+    @property
+    def ambiente(self) -> Ambiente:
+        return self._ambiente
 
     @property
     def tempo_restante(self) -> float:
@@ -69,72 +96,154 @@ class Fase:
     def tempo_esgotado(self) -> bool:
         return self._cronometro.esgotado
 
+    @property
+    def tempo_ilimitado(self) -> bool:
+        return self._cronometro.ilimitado
+
     def avancar(self, dt: float, intencao: Vetor2) -> bool:
-        """Move o jogador e desconta o tempo. Devolve True se for hora de alertar."""
-        self._jogador.mover(intencao, dt, self._labirinto)
+        """Move o jogador, aplica buffs/debuffs e desconta o tempo. Devolve True se for hora de alertar."""
+        self._jogador.mover(intencao, dt, self._labirinto, self._ambiente.locomocao())
+        for ocorrencia in self._ambiente.atualizar(dt, self._jogador):
+            self._registrar(ocorrencia)
         return self._cronometro.avancar(dt)
+
+    def aplicar_premio(self, tipo: TipoDeItem) -> None:
+        """Buff direto, sem caixa (modo teste dos mapas)."""
+        self._registrar(self._ambiente.aplicar_premio(tipo))
+
+    def apertar(self, direcao: Direcao) -> None:
+        """Seta apertada (so conta enquanto esta preso na teia)."""
+        ocorrencia = self._ambiente.apertar(direcao)
+        if ocorrencia is not None:
+            self._registrar(ocorrencia)
+
+    def abrir_caixa_magica(self) -> None:
+        """Como se tivesse encostado numa caixa "?" (modo apresentacao: mostra a roleta)."""
+        self._registrar(self._ambiente.abrir_caixa_virtual())
+
+    def recolher_ocorrencias(self) -> tuple[Ocorrencia, ...]:
+        """Entrega (e esquece) o que aconteceu desde a ultima vez que alguem perguntou."""
+        ocorrencias, self._pendentes = tuple(self._pendentes), []
+        return ocorrencias
 
     def jogador_na_saida(self) -> bool:
         return self._jogador.caixa_de_colisao().intersecta(self._labirinto.area_da_saida())
+
+    def _registrar(self, ocorrencia: Ocorrencia) -> None:
+        if ocorrencia.segundos:
+            self._cronometro.ajustar(ocorrencia.segundos)
+        self._pendentes.append(ocorrencia)
 
 
 class FabricaDeFases:
     """Factory: monta fases cada vez mais dificeis.
 
-    Composicao: COMO gerar o mapa (GeradorDeLabirinto) e QUANTO dificultar
-    (Dificuldade) sao objetos injetados - podem ser trocados sem mexer aqui.
+    Composicao: COMO gerar o mapa (GeradorDeLabirinto), QUANTO dificultar
+    (Dificuldade) e O QUE cada tema tem de especial (Bioma) sao objetos
+    injetados - podem ser trocados sem mexer aqui.
+
+    vitrine=True: modo APRESENTACAO - labirinto pequeno, sem limite de tempo
+    e com todos os perigos/caixas do mapa colados na entrada.
+
+    O mapa (tema) so muda a cada `fases_por_mapa` fases: 1-3 no mesmo mapa,
+    4-6 em outro (nunca repete o anterior), e assim por diante.
     """
 
     LIMITE_SEMENTE = 1_000_000
-    ALTURA_DOS_PES = 12  # o personagem nasce com os pes um pouco abaixo do centro do tile
+    ALTURA_DOS_PES = Jogador.ALTURA_DOS_PES
+    TAMANHO_DA_VITRINE = (8, 6)
+    FASES_POR_MAPA = 3
 
     def __init__(self, gerador: GeradorDeLabirinto, dificuldade: Dificuldade,
-                 temas: Sequence[str], sorteio: random.Random | None = None) -> None:
+                 temas: Sequence[str], sorteio: random.Random | None = None,
+                 biomas: Mapping[str, Bioma] | None = None, vitrine: bool = False,
+                 fases_por_mapa: int = FASES_POR_MAPA) -> None:
         if not temas:
             raise ValueError("informe ao menos um tema")
+        if fases_por_mapa < 1:
+            raise ValueError("fases_por_mapa precisa ser pelo menos 1")
         self._gerador = gerador
         self._dificuldade = dificuldade
         self._temas = tuple(temas)
         self._sorteio = sorteio if sorteio is not None else random.SystemRandom()
+        self._biomas = dict(biomas or {})
+        self._vitrine = vitrine
+        self._fases_por_mapa = fases_por_mapa
+        self._temas_por_bloco: dict[int, str] = {}  # bloco de fases -> mapa sorteado
+
+    @property
+    def dificuldade(self) -> Dificuldade:
+        return self._dificuldade
+
+    @property
+    def vitrine(self) -> bool:
+        return self._vitrine
+
+    @property
+    def fases_por_mapa(self) -> int:
+        return self._fases_por_mapa
+
+    def tema_da_fase(self, numero: int) -> str:
+        """O mapa da fase: sorteado no comeco de cada bloco e mantido ate o bloco acabar."""
+        bloco = (numero - 1) // self._fases_por_mapa
+        if bloco not in self._temas_por_bloco:
+            anterior = self._temas_por_bloco.get(bloco - 1)
+            opcoes = [tema for tema in self._temas if tema != anterior] or list(self._temas)
+            self._temas_por_bloco[bloco] = self._sorteio.choice(opcoes)
+        return self._temas_por_bloco[bloco]
+
+    def etapa_no_mapa(self, numero: int) -> int:
+        """1, 2 ou 3: quantas fases ja foram (contando esta) no mapa atual."""
+        return (numero - 1) % self._fases_por_mapa + 1
 
     def criar(self, numero: int) -> Fase:
+        tema = self.tema_da_fase(numero)
         semente = self._sorteio.randrange(self.LIMITE_SEMENTE)
-        rng = random.Random(semente)  # mesma semente => mesmo labirinto e mesmo tema
-        colunas, linhas = self._dificuldade.tamanho(numero)
+        rng = random.Random(semente)  # mesma semente => mesmo labirinto e itens
+        colunas, linhas = self.TAMANHO_DA_VITRINE if self._vitrine else self._dificuldade.tamanho(numero)
         labirinto = self._gerador.gerar(colunas, linhas, rng)
-        tema = rng.choice(self._temas)
+        bioma = self._biomas.get(tema, Bioma.neutro())
+        ambiente = bioma.criar_ambiente(labirinto, rng, self._dificuldade, vitrine=self._vitrine, fase=numero)
 
         centro_x, centro_y = labirinto.centro_do_tile(labirinto.entrada)
         jogador = Jogador(centro_x, centro_y + self.ALTURA_DOS_PES)
-        distancia = labirinto.distancia_minima * labirinto.tamanho_tile
-        tempo = self._dificuldade.tempo_limite(numero, distancia, jogador.velocidade)
-        return Fase(numero, semente, tema, labirinto, jogador, Cronometro(tempo),
-                    self._dificuldade.raio_visao(numero))
+        if self._vitrine:
+            cronometro = Cronometro.sem_limite()
+        else:
+            distancia = labirinto.distancia_minima * labirinto.tamanho_tile
+            tempo = self._dificuldade.tempo_limite(numero, distancia, jogador.velocidade) * bioma.fator_de_tempo
+            cronometro = Cronometro(tempo)
+        return Fase(numero, semente, tema, labirinto, jogador, cronometro,
+                    self._dificuldade.raio_visao(numero) * bioma.fator_de_visao, ambiente,
+                    etapa_no_mapa=self.etapa_no_mapa(numero), fases_por_mapa=self._fases_por_mapa)
 
 
 class SituacaoDaPartida(Enum):
     EM_ANDAMENTO = auto()
     FASE_CONCLUIDA = auto()
     TEMPO_ESGOTADO = auto()
+    SEM_VIDA = auto()
 
 
 class Partida:
-    """Uma corrida completa: fase 1, 2, 3... ate o tempo acabar.
+    """Uma corrida completa: fase 1, 2, 3... ate o tempo (ou os coracoes) acabar.
 
-    E a raiz do agregado: de fora ninguem mexe no cronometro, no placar ou na
-    posicao do jogador. Tudo passa por `atualizar` e `avancar_para_proxima_fase`,
-    que garantem as regras (ex.: nao da para pular de fase sem concluir a atual).
-    Os acontecimentos sao avisados aos ouvintes (Observer), sem a Partida
-    saber se alguem toca som, salva recorde ou mostra conquistas.
+    E a raiz do agregado: de fora ninguem mexe no cronometro, no placar, na
+    vida ou na posicao do jogador. Tudo passa por `atualizar` e
+    `avancar_para_proxima_fase`, que garantem as regras (ex.: nao da para
+    pular de fase sem concluir a atual). Os acontecimentos sao avisados aos
+    ouvintes (Observer), sem a Partida saber se alguem toca som ou salva recorde.
     """
 
-    def __init__(self, fabrica: FabricaDeFases, placar: Placar | None = None) -> None:
+    def __init__(self, fabrica: FabricaDeFases, placar: Placar | None = None, vida: Vida | None = None) -> None:
         self._fabrica = fabrica
         self._placar = placar if placar is not None else Placar()
+        self._vida = vida if vida is not None else Vida()
         self._ouvintes: list[OuvinteDaPartida] = []
         self._fase = fabrica.criar(1)
         self._situacao = SituacaoDaPartida.EM_ANDAMENTO
         self._ultimo_resultado: ResultadoDaFase | None = None
+        self._ocorrencias: tuple[Ocorrencia, ...] = ()
 
     # ------------------------------------------------------------------
     # Consultas
@@ -152,12 +261,30 @@ class Partida:
         return self._placar.pontos
 
     @property
+    def dificuldade(self) -> Dificuldade:
+        return self._fabrica.dificuldade
+
+    @property
+    def vida(self) -> Vida:
+        return self._vida
+
+    @property
+    def vitrine(self) -> bool:
+        """Modo apresentacao: nao tem fim de jogo (coracoes voltam, tempo nao acaba)."""
+        return self._fabrica.vitrine
+
+    @property
     def situacao(self) -> SituacaoDaPartida:
         return self._situacao
 
     @property
     def ultimo_resultado(self) -> ResultadoDaFase | None:
         return self._ultimo_resultado
+
+    @property
+    def ocorrencias(self) -> tuple[Ocorrencia, ...]:
+        """O que aconteceu no ultimo `atualizar` (a tela usa para tremer, roleta...)."""
+        return self._ocorrencias
 
     # ------------------------------------------------------------------
     # Comandos
@@ -166,13 +293,25 @@ class Partida:
         self._ouvintes.append(ouvinte)
 
     def atualizar(self, dt: float, intencao: Vetor2) -> None:
+        self._ocorrencias = ()
         if self._situacao is not SituacaoDaPartida.EM_ANDAMENTO:
             return
-        if self._fase.avancar(dt, intencao):
+        alertar = self._fase.avancar(dt, intencao)
+        self._ocorrencias = self._fase.recolher_ocorrencias()
+        for ocorrencia in self._ocorrencias:
+            self._avisar(lambda ouvinte, o=ocorrencia: ouvinte.ao_ocorrer(o))
+            if ocorrencia.dano:
+                self._vida.perder(ocorrencia.dano)
+        if alertar:
             restante = self._fase.tempo_restante
             self._avisar(lambda ouvinte: ouvinte.ao_alertar_tempo(restante))
 
-        if self._fase.jogador_na_saida():
+        if self._vida.acabou:
+            if self.vitrine:
+                self._vida.recuperar(self._vida.maximo)
+            else:
+                self._encerrar_sem_vida()
+        elif self._fase.jogador_na_saida():
             self._concluir_fase()
         elif self._fase.tempo_esgotado:
             self._encerrar_por_tempo()
@@ -181,7 +320,13 @@ class Partida:
         if self._situacao is not SituacaoDaPartida.FASE_CONCLUIDA:
             raise RuntimeError("so da para avancar depois de concluir a fase atual")
         self._fase = self._fabrica.criar(self._fase.numero + 1)
+        self._vida.recuperar(1)  # premio por sair do labirinto
         self._situacao = SituacaoDaPartida.EM_ANDAMENTO
+
+    def apertar(self, direcao: Direcao) -> None:
+        """Seta apertada (para sair da teia). O aviso sai no proximo `atualizar`."""
+        if self._situacao is SituacaoDaPartida.EM_ANDAMENTO:
+            self._fase.apertar(direcao)
 
     # ------------------------------------------------------------------
     def _concluir_fase(self) -> None:
@@ -194,6 +339,11 @@ class Partida:
         self._situacao = SituacaoDaPartida.TEMPO_ESGOTADO
         fase = self._fase.numero
         self._avisar(lambda ouvinte: ouvinte.ao_esgotar_tempo(fase))
+
+    def _encerrar_sem_vida(self) -> None:
+        self._situacao = SituacaoDaPartida.SEM_VIDA
+        fase = self._fase.numero
+        self._avisar(lambda ouvinte: ouvinte.ao_perder_todas_as_vidas(fase))
 
     def _avisar(self, evento: Callable[[OuvinteDaPartida], None]) -> None:
         for ouvinte in self._ouvintes:

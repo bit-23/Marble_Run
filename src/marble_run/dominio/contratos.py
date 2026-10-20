@@ -8,11 +8,13 @@ contratos - nunca o contrario.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from .ambiente import Ocorrencia
     from .geometria import Caixa
-    from .regras import ResultadoDaFase
+    from .regras import NivelDeDificuldade, ResultadoDaFase
 
 
 class MapaDeColisao(Protocol):
@@ -43,6 +45,12 @@ class OuvinteDaPartida(ABC):
     def ao_esgotar_tempo(self, fase_alcancada: int) -> None:
         """O tempo acabou: fim da partida."""
 
+    def ao_perder_todas_as_vidas(self, fase_alcancada: int) -> None:
+        """Acabaram os coracoes: fim da partida."""
+
+    def ao_ocorrer(self, ocorrencia: Ocorrencia) -> None:
+        """Abriu uma caixa, congelou, queimou, pulou na mola, comecou uma tempestade..."""
+
 
 class RepositorioDeRecorde(ABC):
     """Onde o recorde fica guardado (arquivo, banco, nuvem... o dominio nao liga)."""
@@ -57,12 +65,39 @@ class RepositorioDeRecorde(ABC):
 
 
 class RepositorioDePontuacao(ABC):
-    """Armazena a melhor pontuacao de cada jogador."""
+    """Melhor pontuacao de cada jogador, separada por dificuldade (o ranking)."""
 
     @abstractmethod
-    def carregar_melhor(self, jogador: str) -> tuple[int, int]:
+    def carregar_melhor(self, jogador: str, dificuldade: NivelDeDificuldade) -> tuple[int, int]:
         """Devolve (pontos, fase) ou (0, 0) se ainda nao houver pontuacao."""
 
     @abstractmethod
-    def salvar_melhor(self, jogador: str, pontos: int, fase: int) -> None:
-        """Guarda a pontuacao quando superar o recorde do jogador."""
+    def salvar_melhor(self, jogador: str, dificuldade: NivelDeDificuldade, pontos: int, fase: int) -> None:
+        """Guarda a pontuacao quando superar o recorde do jogador naquela dificuldade."""
+
+    @abstractmethod
+    def ranking(self, dificuldade: NivelDeDificuldade, limite: int = 10) -> list[EntradaDoRanking]:
+        """Os melhores da dificuldade, do maior para o menor."""
+
+
+class EdicaoDoRanking(ABC):
+    """Operacoes de manutencao do ranking (so a tela de DESENVOLVEDOR usa - ISP)."""
+
+    @abstractmethod
+    def apagar(self, jogador: str, dificuldade: NivelDeDificuldade) -> None: ...
+
+    @abstractmethod
+    def atualizar(self, jogador: str, dificuldade: NivelDeDificuldade, novo_nome: str,
+                  pontos: int, fase: int) -> bool:
+        """Renomeia/edita. False se `novo_nome` ja for de OUTRO jogador nessa dificuldade."""
+
+    @abstractmethod
+    def limpar(self, dificuldade: NivelDeDificuldade) -> None:
+        """Apaga o ranking inteiro de uma dificuldade."""
+
+
+@dataclass(frozen=True)
+class EntradaDoRanking:
+    jogador: str
+    pontos: int
+    fase: int

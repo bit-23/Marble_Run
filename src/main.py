@@ -20,14 +20,16 @@ from marble_run.apresentacao.entrada import ControleHibrido, MapaDeTeclas
 from marble_run.apresentacao.interface import Hud, Painel, Tipografia
 from marble_run.apresentacao.jogo import Aplicacao, Jogo
 from marble_run.apresentacao.personagem import SpritesDoJogador
+from marble_run.apresentacao.pixelart import FontePixel, FundoDoMenu
 from marble_run.apresentacao.servicos import Preferencias, ServicosDoJogo
 from marble_run.apresentacao.sonorizacao import RitmoDePassos, SonsDaPartida
 from marble_run.apresentacao.temas import CatalogoDeTemas
+from marble_run.dominio.biomas import Bioma
 from marble_run.dominio.geradores import GeradorBacktracker
 from marble_run.dominio.partida import FabricaDeFases
-from marble_run.dominio.regras import Dificuldade, Recorde
+from marble_run.dominio.regras import Dificuldade, NivelDeDificuldade, Recorde
 from marble_run.infraestrutura.audio import FabricaDeAudio
-from marble_run.infraestrutura.persistencia import PontuacoesEmSQLite, RecordeEmArquivo
+from marble_run.infraestrutura.persistencia import PontuacoesEmSQLite, PreferenciasEmJson, RecordeEmArquivo
 from marble_run.infraestrutura.recursos import LocalizadorDeRecursos
 
 LARGURA, ALTURA = 960, 640
@@ -44,10 +46,26 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
     audio = FabricaDeAudio.criar(recursos.pasta_sons)  # AudioPygame ou AudioMudo
     recorde = Recorde(RecordeEmArquivo(recursos.arquivo_recorde))
     pontuacoes = PontuacoesEmSQLite(recursos.arquivo_pontuacoes)
+    preferencias = Preferencias(PreferenciasEmJson(recursos.arquivo_preferencias), audio)
 
     # Dominio: regras puras, montadas por composicao
     temas = CatalogoDeTemas.padrao()
-    fases = FabricaDeFases(GeradorBacktracker(), Dificuldade(), temas.nomes)
+    biomas = {  # o que cada tema tem de especial (buffs, debuffs e fenomenos)
+        "gelo": Bioma.gelado(),
+        "fogo": Bioma.vulcanico(),
+        "deserto": Bioma.desertico(),
+        "masmorra": Bioma.masmorra(),
+        "terra": Bioma.terroso(),
+        "vento": Bioma.ventoso(),
+    }
+
+    def fases(nivel: NivelDeDificuldade) -> FabricaDeFases:
+        """Cada partida usa a dificuldade escolhida no menu."""
+        return FabricaDeFases(GeradorBacktracker(), Dificuldade.do_nivel(nivel), temas.nomes, biomas=biomas)
+
+    def apresentacoes(tema: str) -> FabricaDeFases:
+        """Modo apresentacao: um mapa so, labirinto pequeno, sem tempo e tudo perto da entrada."""
+        return FabricaDeFases(GeradorBacktracker(), Dificuldade(), [tema], biomas=biomas, vitrine=True)
 
     # Apresentacao
     tipografia = Tipografia()
@@ -57,23 +75,28 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
         tipografia=tipografia,
         hud=Hud(tipografia, tamanho),
         painel=Painel(tipografia, tamanho),
-        cenas=FabricaDeCenas(temas, sprites, tamanho),
+        cenas=FabricaDeCenas(temas, sprites, tamanho, preferencias),
         sprites=sprites,
         controle=ControleHibrido(),
         passos=RitmoDePassos(audio),
         recorde=recorde,
         pontuacoes=pontuacoes,
-        preferencias=Preferencias(),
+        editor_do_ranking=pontuacoes,  # a mesma classe SQLite cumpre os dois contratos
+        preferencias=preferencias,
+        audio=audio,
+        fonte_pixel=FontePixel(),
+        fundo_menu=FundoDoMenu(),
     )
     return Jogo(servicos, fases,
                 ouvintes=(recorde, SonsDaPartida(audio)),  # Observers da partida
-                audio=audio, teclas=MapaDeTeclas())
+                audio=audio, teclas=MapaDeTeclas(), apresentacoes=apresentacoes)
 
 
 def main() -> None:
     FabricaDeAudio.pre_configurar()  # configurar o audio ANTES do pygame.init() evita atraso nos sons
     pygame.init()
-    tela = pygame.display.set_mode((LARGURA, ALTURA))
+    # SCALED: em tela cheia a imagem e ampliada mantendo a proporcao (sem mudar a resolucao do monitor)
+    tela = pygame.display.set_mode((LARGURA, ALTURA), pygame.SCALED)
     pygame.display.set_caption(TITULO)
     pygame.event.pump()  # correcao para Linux (Fedora / Wayland)
     pygame.display.flip()

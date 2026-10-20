@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 pygame-ce>=2.5.2
+=======
+pygame-ce=2.5.2
+>>>>>>> a9e3d27584c4a1d0d0544cdf2043481107ee4d8c

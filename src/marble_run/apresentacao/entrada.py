@@ -26,6 +26,12 @@ class Acao(Enum):
     IR_PARA_MENU = auto()
     ALTERNAR_SOM = auto()
     ALTERNAR_LUZ = auto()
+    APROXIMAR_ZOOM = auto()
+    AFASTAR_ZOOM = auto()
+    CIMA = auto()       # navegacao nos menus (na partida o movimento e lido direto do Controle)
+    BAIXO = auto()
+    ESQUERDA = auto()
+    DIREITA = auto()
 
 
 class MapaDeTeclas:
@@ -38,6 +44,19 @@ class MapaDeTeclas:
         pygame.K_q: Acao.IR_PARA_MENU,
         pygame.K_m: Acao.ALTERNAR_SOM,
         pygame.K_l: Acao.ALTERNAR_LUZ,
+        pygame.K_EQUALS: Acao.APROXIMAR_ZOOM,
+        pygame.K_PLUS: Acao.APROXIMAR_ZOOM,
+        pygame.K_KP_PLUS: Acao.APROXIMAR_ZOOM,
+        pygame.K_MINUS: Acao.AFASTAR_ZOOM,
+        pygame.K_KP_MINUS: Acao.AFASTAR_ZOOM,
+        pygame.K_UP: Acao.CIMA,
+        pygame.K_w: Acao.CIMA,
+        pygame.K_DOWN: Acao.BAIXO,
+        pygame.K_s: Acao.BAIXO,
+        pygame.K_LEFT: Acao.ESQUERDA,
+        pygame.K_a: Acao.ESQUERDA,
+        pygame.K_RIGHT: Acao.DIREITA,
+        pygame.K_d: Acao.DIREITA,
     }
     BOTOES_DO_CONTROLE: Mapping[int, Acao] = {
         pygame.CONTROLLER_BUTTON_A: Acao.CONFIRMAR,
@@ -46,6 +65,12 @@ class MapaDeTeclas:
         pygame.CONTROLLER_BUTTON_BACK: Acao.IR_PARA_MENU,
         pygame.CONTROLLER_BUTTON_X: Acao.ALTERNAR_LUZ,
         pygame.CONTROLLER_BUTTON_Y: Acao.ALTERNAR_SOM,
+        pygame.CONTROLLER_BUTTON_RIGHTSHOULDER: Acao.APROXIMAR_ZOOM,
+        pygame.CONTROLLER_BUTTON_LEFTSHOULDER: Acao.AFASTAR_ZOOM,
+        pygame.CONTROLLER_BUTTON_DPAD_UP: Acao.CIMA,
+        pygame.CONTROLLER_BUTTON_DPAD_DOWN: Acao.BAIXO,
+        pygame.CONTROLLER_BUTTON_DPAD_LEFT: Acao.ESQUERDA,
+        pygame.CONTROLLER_BUTTON_DPAD_RIGHT: Acao.DIREITA,
     }
 
     def __init__(self, teclas: Mapping[int, Acao] | None = None) -> None:
@@ -60,12 +85,18 @@ class MapaDeTeclas:
 
 
 class ControleTeclado(Controle):
-    """Setas ou WASD."""
+    """Setas ou WASD para andar; TFGH ou teclado numerico (8/4/5/6) para olhar em volta."""
 
     def direcao_desejada(self) -> Vetor2:
         teclas = pygame.key.get_pressed()
         dx = int(teclas[pygame.K_RIGHT] or teclas[pygame.K_d]) - int(teclas[pygame.K_LEFT] or teclas[pygame.K_a])
         dy = int(teclas[pygame.K_DOWN] or teclas[pygame.K_s]) - int(teclas[pygame.K_UP] or teclas[pygame.K_w])
+        return Vetor2(dx, dy)
+
+    def olhar_desejado(self) -> Vetor2:
+        teclas = pygame.key.get_pressed()
+        dx = int(teclas[pygame.K_h] or teclas[pygame.K_KP6]) - int(teclas[pygame.K_f] or teclas[pygame.K_KP4])
+        dy = int(teclas[pygame.K_g] or teclas[pygame.K_KP5]) - int(teclas[pygame.K_t] or teclas[pygame.K_KP8])
         return Vetor2(dx, dy)
 
 
@@ -117,6 +148,27 @@ class ControleHibrido(Controle):
         except pygame.error:
             self._descartar_controle()
             return Vetor2()
+
+    def olhar_desejado(self) -> Vetor2:
+        """Teclado (TFGH) ou analogico DIREITO, proporcional a inclinacao."""
+        olhar_teclado = self._teclado.olhar_desejado()
+        if not olhar_teclado.eh_nulo or self._controle is None:
+            return olhar_teclado
+        try:
+            x = self._eixo_proporcional(self._controle.get_axis(pygame.CONTROLLER_AXIS_RIGHTX))
+            y = self._eixo_proporcional(self._controle.get_axis(pygame.CONTROLLER_AXIS_RIGHTY))
+            return Vetor2(x, y)
+        except pygame.error:
+            self._descartar_controle()
+            return Vetor2()
+
+    @classmethod
+    def _eixo_proporcional(cls, valor: int) -> float:
+        fracao = max(-1.0, min(1.0, valor / 32767))
+        if abs(fracao) < cls.ZONA_MORTA:
+            return 0.0
+        sinal = 1.0 if fracao > 0 else -1.0
+        return sinal * (abs(fracao) - cls.ZONA_MORTA) / (1 - cls.ZONA_MORTA)
 
     def _sincronizar_controle(self) -> None:
         if self._controle is not None and self._controle.attached():

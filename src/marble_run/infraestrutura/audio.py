@@ -3,6 +3,7 @@ audio.py - Implementacoes do contrato ServicoAudio + sintese de sons 8-bit.
 
 Se existirem arquivos em  assets/sound/  eles sao usados:
     musica.ogg (ou .mp3/.wav)   passo.wav   vitoria.wav   derrota.wav   alerta.wav
+    item  relogio  flauta  mola  congelar  queimar  teia  tempestade  terremoto  rajada  apagao
 Se NAO existirem, o proprio codigo sintetiza sons simples (estilo 8-bit).
 
 Antes uma unica classe (GerenciadorSom) iniciava o mixer, sintetizava ondas,
@@ -99,6 +100,25 @@ class BancoDeSons:
             Efeito.VITORIA: self._vitoria,
             Efeito.DERROTA: self._derrota,
             Efeito.ALERTA: self._alerta,
+            Efeito.ITEM: self._item,
+            Efeito.RELOGIO: self._relogio,
+            Efeito.FLAUTA: self._flauta,
+            Efeito.MOLA: self._mola,
+            Efeito.CONGELAR: self._congelar,
+            Efeito.QUEIMAR: self._queimar,
+            Efeito.TEIA: self._teia,
+            Efeito.TEMPESTADE: self._tempestade,
+            Efeito.TERREMOTO: self._terremoto,
+            Efeito.RAJADA: self._rajada,
+            Efeito.APAGAO: self._apagao,
+            Efeito.ERUPCAO: self._erupcao,
+            Efeito.MENU: self._menu,
+            Efeito.CONFIRMAR: self._confirmar,
+            Efeito.DESLIZAR: self._deslizar,
+            Efeito.TIQUE: self._tique,
+            Efeito.PREMIO: self._premio,
+            Efeito.SEGREDO: self._segredo,
+            Efeito.ERRO: self._erro,
         }
 
     def efeitos(self) -> dict[Efeito, pygame.mixer.Sound]:
@@ -146,6 +166,106 @@ class BancoDeSons:
 
     def _alerta(self) -> pygame.mixer.Sound:
         return self._para_sound(self._sint.onda(880, 0.09, 0.3, FormaDeOnda.QUADRADA), 0.5)
+
+    def _arpejo(self, notas: Sequence[tuple[str, int]], passo: float, dur: float,
+                forma: FormaDeOnda, volume: float) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(passo * len(notas) + dur, [
+            (i * passo, s.onda(s.frequencia(n, o), dur, 0.28, forma)) for i, (n, o) in enumerate(notas)]), volume)
+
+    def _item(self) -> pygame.mixer.Sound:
+        return self._arpejo([("E", 5), ("B", 5)], 0.06, 0.1, FormaDeOnda.QUADRADA, 0.5)
+
+    def _relogio(self) -> pygame.mixer.Sound:
+        return self._arpejo([("C", 6), ("G", 5), ("C", 6), ("G", 5)], 0.08, 0.06, FormaDeOnda.TRIANGULO, 0.6)
+
+    def _flauta(self) -> pygame.mixer.Sound:
+        """Melodia 'encantadora' curtinha (seno = som de flauta)."""
+        notas = [("A", 5), ("C", 6), ("E", 6), ("D", 6), ("C", 6), ("A", 5), ("B", 5), ("E", 6)]
+        return self._arpejo(notas, 0.13, 0.22, FormaDeOnda.SENO, 0.8)
+
+    def _mola(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(180, 0.28, 0.35, FormaDeOnda.QUADRADA, 900), 0.45)
+
+    def _congelar(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.45, [
+            (0, s.onda(2200, 0.4, 0.15, FormaDeOnda.TRIANGULO, 1400)),
+            (0.05, s.onda(3100, 0.3, 0.1, FormaDeOnda.SENO, 2500)),
+            (0, s.onda(0, 0.15, 0.12, FormaDeOnda.RUIDO))]), 0.5)
+
+    def _queimar(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.4, [
+            (0, s.onda(0, 0.4, 0.3, FormaDeOnda.RUIDO)),
+            (0, s.onda(300, 0.25, 0.25, FormaDeOnda.QUADRADA, 90))]), 0.55)
+
+    def _teia(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(520, 0.25, 0.25, FormaDeOnda.TRIANGULO, 260), 0.5)
+
+    def _tempestade(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(1.2, [
+            (0, s.onda(0, 1.2, 0.25, FormaDeOnda.RUIDO)),
+            (0, s.onda(140, 1.0, 0.12, FormaDeOnda.SENO, 260))]), 0.5)
+
+    def _terremoto(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(1.2, [
+            (0, s.onda(48, 1.2, 0.45, FormaDeOnda.QUADRADA, 36)),
+            (0, s.onda(0, 1.0, 0.18, FormaDeOnda.RUIDO))]), 0.6)
+
+    def _rajada(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.8, [
+            (0, s.onda(0, 0.8, 0.22, FormaDeOnda.RUIDO)),
+            (0, s.onda(400, 0.7, 0.08, FormaDeOnda.SENO, 900))]), 0.45)
+
+    def _apagao(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(330, 0.6, 0.3, FormaDeOnda.TRIANGULO, 110), 0.5)
+
+    def _erupcao(self) -> pygame.mixer.Sound:
+        """Ronco grave + chiado de lava subindo."""
+        s = self._sint
+        return self._para_sound(s.mixar(1.0, [
+            (0, s.onda(60, 0.9, 0.4, FormaDeOnda.QUADRADA, 90)),
+            (0.1, s.onda(0, 0.8, 0.25, FormaDeOnda.RUIDO)),
+            (0.1, s.onda(200, 0.6, 0.12, FormaDeOnda.SENO, 700))]), 0.55)
+
+    def _menu(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(660, 0.04, 0.25, FormaDeOnda.QUADRADA), 0.35)
+
+    def _confirmar(self) -> pygame.mixer.Sound:
+        return self._arpejo([("G", 5), ("D", 6)], 0.05, 0.08, FormaDeOnda.QUADRADA, 0.45)
+
+    def _deslizar(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.5, [
+            (0, s.onda(1800, 0.5, 0.12, FormaDeOnda.TRIANGULO, 900)),
+            (0, s.onda(0, 0.3, 0.08, FormaDeOnda.RUIDO))]), 0.45)
+
+    def _tique(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(1400, 0.025, 0.25, FormaDeOnda.QUADRADA), 0.3)
+
+    def _erro(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.25, [
+            (0, s.onda(140, 0.12, 0.3, FormaDeOnda.QUADRADA)),
+            (0.12, s.onda(110, 0.12, 0.3, FormaDeOnda.QUADRADA))]), 0.5)
+
+    def _premio(self) -> pygame.mixer.Sound:
+        return self._arpejo([("C", 5), ("E", 5), ("G", 5), ("C", 6), ("E", 6)], 0.06, 0.14,
+                            FormaDeOnda.QUADRADA, 0.55)
+
+    def _segredo(self) -> pygame.mixer.Sound:
+        """Fanfarra de "codigo secreto" + explosao."""
+        s = self._sint
+        notas = [("G", 4), ("C", 5), ("E", 5), ("G", 5), ("C", 6)]
+        partes = [(i * 0.07, s.onda(s.frequencia(n, o), 0.12, 0.25, FormaDeOnda.QUADRADA))
+                  for i, (n, o) in enumerate(notas)]
+        partes.append((0.35, s.onda(0, 0.45, 0.35, FormaDeOnda.RUIDO)))
+        partes.append((0.35, s.onda(120, 0.4, 0.3, FormaDeOnda.QUADRADA, 40)))
+        return self._para_sound(s.mixar(0.9, partes), 0.6)
 
     def _sintetizar_musica(self) -> pygame.mixer.Sound:
         """Loop de ~9s: baixo + arpejo em La menor (Am - F - C - G)."""
@@ -196,6 +316,9 @@ class AudioPygame(ServicoAudio):
         self._musica = musica
         self._canal_musica: pygame.mixer.Channel | None = None
         self._mudo = False
+        # volume "de fabrica" de cada som; o volume escolhido pelo jogador multiplica este
+        self._base_efeitos = {efeito: som.get_volume() for efeito, som in self._efeitos.items()}
+        self._base_musica = musica.get_volume() if musica is not None else 1.0
 
     def tocar(self, efeito: Efeito) -> None:
         som = self._efeitos.get(efeito)
@@ -210,12 +333,22 @@ class AudioPygame(ServicoAudio):
             self._canal_musica.pause()
 
     def alternar_mudo(self) -> None:
-        self._mudo = not self._mudo
+        self.definir_mudo(not self._mudo)
+
+    def definir_mudo(self, mudo: bool) -> None:
+        self._mudo = mudo
         if self._canal_musica:
             if self._mudo:
                 self._canal_musica.pause()
             else:
                 self._canal_musica.unpause()
+
+    def definir_volumes(self, musica: float, efeitos: float) -> None:
+        musica, efeitos = max(0.0, min(1.0, musica)), max(0.0, min(1.0, efeitos))
+        if self._musica is not None:
+            self._musica.set_volume(self._base_musica * musica)
+        for efeito, som in self._efeitos.items():
+            som.set_volume(self._base_efeitos[efeito] * efeitos)
 
 
 class AudioMudo(ServicoAudio):
@@ -232,6 +365,12 @@ class AudioMudo(ServicoAudio):
         pass
 
     def alternar_mudo(self) -> None:
+        pass
+
+    def definir_mudo(self, mudo: bool) -> None:
+        pass
+
+    def definir_volumes(self, musica: float, efeitos: float) -> None:
         pass
 
 
