@@ -12,6 +12,7 @@ global escondido) e o Jogador se desenhava sozinho. Agora:
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pygame
@@ -74,20 +75,31 @@ class AnimacaoDoJogador:
     QUADROS_POR_SEGUNDO = 12
     GIROS_POR_SEGUNDO = 14  # deslizando no gelo: gira olhando para todos os lados
     ALTURA_DO_PULO = 46     # pixels do ponto mais alto do arco da mola
+    DURACAO_DO_IMPACTO = 0.16
     ORDEM_DO_GIRO = (Direcao.BAIXO, Direcao.ESQUERDA, Direcao.CIMA, Direcao.DIREITA)
 
     def __init__(self, sprites: SpritesDoJogador) -> None:
         self._sprites = sprites
         self._tempo = 0.0
+        self._tempo_ambiente = 0.0
         self._giro = 0.0
         self._girando = False
+        self._impacto = 0.0
+        self._bateu_anteriormente = False
         self._sombra = pygame.Surface((30, 10), pygame.SRCALPHA)
         pygame.draw.ellipse(self._sombra, (0, 0, 0, 90), self._sombra.get_rect())
 
-    def atualizar(self, dt: float, andando: bool, girando: bool = False) -> None:
+    def atualizar(self, dt: float, andando: bool, girando: bool = False,
+                  bateu: bool = False) -> None:
+        dt = max(0.0, dt)
+        self._tempo_ambiente += dt
         self._tempo = self._tempo + dt * self.QUADROS_POR_SEGUNDO if andando else 0.0
         self._girando = girando
         self._giro = self._giro + dt * self.GIROS_POR_SEGUNDO if girando else 0.0
+        self._impacto = max(0.0, self._impacto - dt)
+        if bateu and not self._bateu_anterior:
+            self._impacto = self.DURACAO_DO_IMPACTO
+        self._bateu_anterior = bateu
 
     def imagem(self, jogador: Jogador) -> pygame.Surface:
         if self._girando:
@@ -100,9 +112,40 @@ class AnimacaoDoJogador:
         img = self.imagem(jogador)
         altura = round(jogador.altura_do_salto * self.ALTURA_DO_PULO)
         chao = (round(jogador.x) - camera[0], round(jogador.y) - camera[1] + 2)
+
+        escala_x = escala_y = 1.0
+        levantar = 0.0
+        if jogador.altura_do_salto > 0:
+            # O cachorro se estica no ar e fica um pouco mais estreito no topo do salto.
+            arco = jogador.altura_do_salto
+            escala_x -= 0.035 * arco
+            escala_y += 0.065 * arco
+        elif jogador.esta_andando and not self._girando:
+            # Um pequeno impulso acompanha a passada sem competir com os quadros existentes.
+            passo = abs(math.sin(self._tempo * math.pi / 2))
+            escala_x += 0.018 * passo
+            escala_y -= 0.035 * passo
+            levantar = passo * 1.5
+        elif not self._girando:
+            # Respiração lenta no repouso, também aplicada às poses viradas de lado.
+            respiracao = (1 + math.sin(self._tempo_ambiente * 2.0)) / 2
+            escala_x -= 0.006 * respiracao
+            escala_y += 0.018 * respiracao
+            levantar = respiracao * 0.7
+
+        if self._impacto:
+            impacto = self._impacto / self.DURACAO_DO_IMPACTO
+            escala_x += 0.045 * impacto
+            escala_y -= 0.07 * impacto
+
+        if escala_x != 1.0 or escala_y != 1.0:
+            tamanho = (max(1, round(img.get_width() * escala_x)),
+                       max(1, round(img.get_height() * escala_y)))
+            img = pygame.transform.scale(img, tamanho)
+
         sombra = self._sombra
         if altura:  # no ar: sombra menor la embaixo
             k = 1 - 0.5 * jogador.altura_do_salto
             sombra = pygame.transform.scale(self._sombra, (round(30 * k), round(10 * k)))
         tela.blit(sombra, sombra.get_rect(midbottom=(chao[0], chao[1] + 2)))
-        tela.blit(img, img.get_rect(midbottom=(chao[0], chao[1] - altura)))
+        tela.blit(img, img.get_rect(midbottom=(chao[0], chao[1] - altura - round(levantar))))

@@ -95,8 +95,9 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
 def main() -> None:
     FabricaDeAudio.pre_configurar()  # configurar o audio ANTES do pygame.init() evita atraso nos sons
     pygame.init()
-    # SCALED: em tela cheia a imagem e ampliada mantendo a proporcao (sem mudar a resolucao do monitor)
-    tela = pygame.display.set_mode((LARGURA, ALTURA), pygame.SCALED)
+    # SCALED preserva a resolucao logica do jogo; RESIZABLE habilita maximizar
+    # e redimensionar a janela sem refazer o layout de cada tela.
+    tela = pygame.display.set_mode((LARGURA, ALTURA), pygame.SCALED | pygame.RESIZABLE)
     pygame.display.set_caption(TITULO)
     pygame.event.pump()  # correcao para Linux (Fedora / Wayland)
     pygame.display.flip()

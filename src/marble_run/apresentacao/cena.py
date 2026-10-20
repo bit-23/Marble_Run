@@ -301,7 +301,9 @@ class Cena:
         self._flash = max(0.0, self._flash - dt)
 
     def animar_jogador(self, dt: float) -> None:
-        self._animacao.atualizar(dt, self._fase.jogador.esta_andando, self._fase.ambiente.deslizando)
+        jogador = self._fase.jogador
+        self._animacao.atualizar(dt, jogador.esta_andando, self._fase.ambiente.deslizando,
+                                 jogador.bateu)
 
     def focar(self, fracao_x: float, prender_nas_bordas: bool = True) -> None:
         self._camera.focar(fracao_x, prender_nas_bordas)
