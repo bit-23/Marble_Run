@@ -1,0 +1,39 @@
+@startuml 05_tempo_esgotado
+title Diagrama de Sequência - Tempo Esgotado e Reboot
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceMessageAlign left
+autonumber
+
+actor Jogador
+participant "EstadoJogando" as EJ
+participant "Partida" as P
+participant "Fase" as F
+participant "Recorde" as Rec
+participant "RecordeEmArquivo" as Arq
+participant "SonsDaPartida" as Som
+participant "Jogo" as Jogo
+participant "EstadoDerrota" as ED
+participant "EstadoMenu" as Menu
+
+EJ -> P : atualizar(dt, intencao)
+P -> F : tempo_esgotado?
+F --> P : True
+P -> P : situacao = TEMPO_ESGOTADO
+P -> Rec : ao_esgotar_tempo(fase_alcancada)
+alt fase_alcancada > melhor_fase
+    Rec -> Arq : salvar(fase_alcancada)
+end
+P -> Som : ao_esgotar_tempo(fase_alcancada)
+EJ -> Jogo : mudar_estado(EstadoDerrota)
+
+alt Jogador confirma (A / ENTER)
+    Jogador -> ED : executar(Acao.CONFIRMAR)
+    ED -> Jogo : mudar_estado(EstadoJogando.nova_corrida())
+    note right : REBOOT: partida nova,\nlabirinto inédito, fase 1
+else Jogador volta (B / ESC)
+    Jogador -> ED : executar(Acao.VOLTAR)
+    ED -> Jogo : mudar_estado(EstadoMenu)
+    Jogo -> Menu ** : EstadoMenu(jogo)
+end
+@enduml

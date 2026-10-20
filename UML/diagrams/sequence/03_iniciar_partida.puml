@@ -1,0 +1,43 @@
+@startuml 03_iniciar_partida
+title Diagrama de Sequência - Iniciar Partida (Menu → Jogando)
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceMessageAlign left
+autonumber
+
+actor Jogador
+participant "Jogo" as Jogo
+participant "EstadoMenu" as Menu
+participant "EstadoJogando" as EJ
+participant "Partida" as P
+participant "FabricaDeFases" as FF
+participant "GeradorBacktracker" as G
+participant "Labirinto" as L
+participant "Jogador (entidade)" as J
+participant "FabricaDeCenas" as FC
+
+Jogador -> Jogo : digita nome + ENTER
+Jogo -> Menu : executar(Acao.CONFIRMAR)
+Menu -> Jogo : definir_nome_jogador(nome)
+Menu -> EJ : nova_corrida(jogo)  <<classmethod>>
+EJ -> Jogo : nova_partida()
+Jogo -> P ** : Partida(fases)
+P -> FF : criar(1)
+FF -> FF : semente = sorteio.randrange(...)
+FF -> G : gerar(colunas, linhas, rng)
+G --> FF : Labirinto
+FF -> L : centro_do_tile(entrada)
+FF -> J ** : Jogador(x, y)
+FF --> P : Fase (labirinto, jogador, cronometro)
+
+loop para cada ouvinte (Recorde, SonsDaPartida)
+    Jogo -> P : inscrever(ouvinte)
+end
+Jogo -> P : inscrever(PontuacaoDoJogador(nome, repositorio))
+Jogo --> EJ : partida
+
+EJ -> FC : criar(partida.fase)
+FC --> EJ : Cena
+EJ --> Menu : EstadoJogando
+Menu -> Jogo : mudar_estado(EstadoJogando)
+@enduml

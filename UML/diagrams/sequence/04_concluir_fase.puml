@@ -1,0 +1,58 @@
+@startuml 04_concluir_fase
+title Diagrama de Sequência - Jogando e Concluir Fase
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceMessageAlign left
+autonumber
+
+participant "EstadoJogando" as EJ
+participant "Controle" as Ctl
+participant "Partida" as P
+participant "Fase" as F
+participant "Jogador (entidade)" as J
+participant "Labirinto" as L
+participant "Placar" as Pl
+participant "SonsDaPartida" as Som
+participant "PontuacaoDoJogador" as Pont
+participant "PontuacoesEmSQLite" as DB
+participant "EstadoVitoria" as EV
+participant "Jogo" as Jogo
+
+== a cada quadro: atualizar(dt) ==
+EJ -> Ctl : direcao_desejada()
+Ctl --> EJ : Vetor2 (intenção)
+EJ -> P : atualizar(dt, intencao)
+P -> F : avancar(dt, intencao)
+F -> J : mover(intencao, dt, labirinto)
+loop pixel a pixel, eixo X e Y
+    J -> L : colide(caixa_de_colisao())
+    L --> J : True / False
+end
+F -> F : cronometro.avancar(dt)
+F --> P : alertar? (bool)
+opt entrou nos segundos finais
+    P -> Som : ao_alertar_tempo(restante)
+end
+
+P -> F : jogador_na_saida()
+F --> P : True
+
+== jogador chegou na saída ==
+P -> Pl : registrar_conclusao(fase, tempo_restante)
+Pl --> P : ResultadoDaFase (bônus, pontos)
+P -> P : situacao = FASE_CONCLUIDA
+P -> Som : ao_concluir_fase(resultado)
+P -> Pont : ao_concluir_fase(resultado)
+Pont -> DB : salvar_melhor(jogador, pontos, fase)
+
+EJ -> P : situacao?
+EJ -> Jogo : mudar_estado(EstadoVitoria)
+
+== comemoração (1,8 s) e próxima fase ==
+Jogo -> EV : atualizar(dt)
+alt tempo >= DURACAO
+    EV -> P : avancar_para_proxima_fase()
+    P -> P : fase = fabrica.criar(numero + 1)
+    EV -> Jogo : mudar_estado(EstadoJogando)
+end
+@enduml
