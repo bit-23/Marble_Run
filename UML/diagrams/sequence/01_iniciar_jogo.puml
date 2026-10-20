@@ -1,0 +1,38 @@
+@startuml 01_iniciar_jogo
+title Diagrama de Sequência - Inicialização (Composition Root)
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceMessageAlign left
+autonumber
+
+actor Jogador
+participant "main.py" as Main
+participant "FabricaDeAudio" as FA
+participant "LocalizadorDeRecursos" as LR
+participant "Recorde" as Rec
+participant "FabricaDeFases" as FF
+participant "Jogo" as Jogo
+participant "EstadoMenu" as Menu
+participant "Aplicacao" as App
+participant "ServicoAudio" as Aud
+
+Jogador -> Main : python main.py
+Main -> FA : pre_configurar()
+Main -> Main : pygame.init(), set_mode(960x640)
+Main -> Main : montar_jogo(tela)
+Main -> LR : detectar()
+LR --> Main : recursos
+Main -> FA : criar(pasta_sons)
+FA --> Main : AudioPygame ou AudioMudo
+Main -> Rec ** : Recorde(RecordeEmArquivo)
+Main -> FF ** : FabricaDeFases(GeradorBacktracker, Dificuldade, temas)
+Main -> Main : cria ServicosDoJogo\n(Hud, Painel, Cenas, Controle, ...)
+Main -> Jogo ** : Jogo(servicos, fases, ouvintes, audio, teclas)
+Jogo -> Menu ** : EstadoMenu(self)
+Main --> Main : jogo
+Main -> App ** : Aplicacao(jogo, tela, FPS)
+Main -> App : executar()
+App -> Jogo : iniciar()
+Jogo -> Aud : iniciar_musica()
+note right of App : entra no game loop\n(ver 02_game_loop)
+@enduml
