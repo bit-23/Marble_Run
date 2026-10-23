@@ -1,0 +1,570 @@
+@startuml classes
+title Marble Run - Diagrama de Classes
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+left to right direction
+
+package "dominio" #E8F4FF {
+  interface MapaDeColisao <<Protocol>> {
+    + colide(caixa) : bool
+  }
+  abstract class OuvinteDaPartida {
+    + ao_alertar_tempo(segundos)
+    + ao_concluir_fase(resultado)
+    + ao_esgotar_tempo(fase)
+    + ao_ocorrer(ocorrencia)
+  }
+  abstract class RepositorioDeRecorde {
+    + {abstract} carregar() : int
+    + {abstract} salvar(fase)
+  }
+  abstract class RepositorioDePontuacao {
+    + {abstract} carregar_melhor(jogador, dificuldade)
+    + {abstract} salvar_melhor(jogador, dificuldade, pontos, fase)
+    + {abstract} ranking(dificuldade, limite) : list[EntradaDoRanking]
+  }
+  abstract class EdicaoDoRanking {
+    + {abstract} apagar(jogador, dificuldade)
+    + {abstract} atualizar(jogador, dificuldade, novo_nome, pontos, fase) : bool
+    + {abstract} limpar(dificuldade)
+  }
+  class EntradaDoRanking <<dataclass>> {
+    + jogador : str
+    + pontos : int
+    + fase : int
+  }
+  class DesafioDaTeia {
+    + sequencia : tuple[Direcao]
+    + acertos : int
+    + concluido : bool
+    + apertar(direcao) : bool
+  }
+  abstract class GeradorDeLabirinto {
+    + {abstract} gerar(colunas, linhas, rng) : Labirinto
+  }
+  class GeradorBacktracker {
+    - proporcao_lacos : float
+    + gerar(colunas, linhas, rng) : Labirinto
+  }
+  class Labirinto {
+    - paredes
+    - entrada : Coordenada
+    - saida : Coordenada
+    - distancia_minima : int
+    - tamanho_tile : int
+    + eh_parede(coluna, linha) : bool
+    + colide(caixa) : bool
+    + centro_do_tile(tile)
+    + area_da_saida() : Caixa
+  }
+  class Coordenada <<NamedTuple>> {
+    + coluna : int
+    + linha : int
+  }
+  class Caixa {
+    + intersecta(outra) : bool
+  }
+  class Vetor2 {
+    + x : float
+    + y : float
+    + norma : float
+    + eh_nulo : bool
+  }
+  enum Direcao {
+    BAIXO
+    CIMA
+    DIREITA
+    ESQUERDA
+  }
+  class Jogador {
+    - x : float
+    - y : float
+    - velocidade : float
+    - direcao : Direcao
+    - andando : bool
+    + bateu : bool
+    + pulando : bool
+    + altura_do_salto : float
+    + mover(intencao, dt, mapa, locomocao)
+    + saltar(x, y, duracao, mapa) : bool
+    + posicionar(x, y, mapa) : bool
+    + parar()
+    + caixa_de_colisao() : Caixa
+  }
+  class Locomocao <<dataclass>> {
+    + multiplicador : float
+    + aderencia : float
+    + travado : bool
+    + invertido : bool
+    + arrasto : Vetor2
+    + intencao_forcada : Vetor2
+  }
+  class Ambiente {
+    + premios : tuple[TipoDeItem]
+    + deslizando : bool
+    + jatos_de_lava : tuple[Coordenada]
+    + locomocao() : Locomocao
+    + multiplicador_de_visao() : float
+    + atualizar(dt, jogador) : list[Ocorrencia]
+    + sortear_premio() : TipoDeItem
+    + aplicar_premio(tipo) : Ocorrencia
+    + forcar_fenomeno()
+  }
+  class CaixaSurpresa {
+    + aberta : bool
+    + abrir()
+  }
+  class MolaDeParede {
+    + direcao : Direcao
+    + destino : Coordenada
+    + area() : Caixa
+  }
+  class Perigo {
+    + tipo : TipoDePerigo
+    + fogo_aceso(tempo) : bool
+    + desfazer()
+  }
+  class Condicoes {
+    + aplicar(condicao, duracao)
+    + ativa(condicao) : bool
+    + atualizar(dt)
+  }
+  class CicloDeEvento {
+    + ativo : bool
+    + em_aviso : bool
+    + intensidade : float
+    + atualizar(dt) : bool
+    + adiantar()
+  }
+  class Ocorrencia <<dataclass>> {
+    + tipo : TipoDeOcorrencia
+    + item : TipoDeItem
+    + fenomeno : Fenomeno
+    + segundos : float
+    + dano : int
+  }
+  class Bioma <<dataclass>> {
+    + fenomeno : Fenomeno
+    + fator_de_tempo : float
+    + fator_de_visao : float
+    + {static} gelado() / desertico() / vulcanico() / masmorra() / terroso() / ventoso()
+    + premios(dificuldade)
+    + criar_ambiente(labirinto, rng, dificuldade, vitrine, fase) : Ambiente
+  }
+  enum TipoDeItem {
+    BLUSA
+    FLAUTA
+    RELOGIO
+    LANTERNA
+    ESTRELA
+    BUSSOLA
+    CAFE
+    CORACAO
+    EXTINTOR
+    BOTA
+    GUARDA_CHUVA
+    PIPA
+    TAPETE
+    GENIO
+    BROCA
+    CAPACETE
+  }
+  enum TipoDePerigo {
+    AGUA
+    FOGO
+    TEIA
+    AREIA_MOVEDICA
+    GELO
+    LAVA
+    BURACO
+  }
+  enum Fenomeno {
+    TEMPESTADE_DE_AREIA
+    TEMPESTADE_DE_GELO
+    APAGAO
+    TERREMOTO
+    RAJADA
+    ERUPCAO
+  }
+  class Fase {
+    - numero : int
+    - semente : int
+    - tema : str
+    - raio_visao : float
+    + tempo_ilimitado : bool
+    + etapa_no_mapa : int
+    + ultima_no_mapa : bool
+    + avancar(dt, intencao) : bool
+    + aplicar_premio(tipo)
+    + abrir_caixa_magica()
+    + recolher_ocorrencias()
+    + jogador_na_saida() : bool
+  }
+  class FabricaDeFases {
+    + vitrine : bool
+    + fases_por_mapa : int
+    + tema_da_fase(numero) : str
+    + etapa_no_mapa(numero) : int
+    + criar(numero) : Fase
+  }
+  class Dificuldade <<dataclass>> {
+    + nivel : NivelDeDificuldade
+    + fases_tranquilas : int
+    + fase_mais_dificil : int
+    + multiplicador_tempo : float
+    + fator_perigos : float
+    + ritmo_fenomenos : float
+    + {static} do_nivel(nivel) : Dificuldade
+    + progresso(fase) : float
+    + tamanho(fase)
+    + tempo_limite(fase, distancia, velocidade)
+    + raio_visao(fase)
+    + perigos(fase) : float
+    + tem_fenomenos(fase) : bool
+    + ritmo_dos_fenomenos(fase) : float
+  }
+  enum NivelDeDificuldade {
+    FACIL
+    NORMAL
+    DIFICIL
+    INSANO
+  }
+  class Cronometro {
+    + avancar(dt) : bool
+    + restante : float
+    + esgotado : bool
+    + ilimitado : bool
+    + {static} sem_limite() : Cronometro
+  }
+  class Vida {
+    + coracoes : int
+    + acabou : bool
+    + perder(quantidade)
+    + recuperar(quantidade)
+  }
+  class Placar {
+    - pontos : int
+    + registrar_conclusao(fase, segundos) : ResultadoDaFase
+  }
+  class ResultadoDaFase <<dataclass>> {
+    + fase : int
+    + bonus : int
+    + pontos_ganhos : int
+  }
+  enum SituacaoDaPartida {
+    EM_ANDAMENTO
+    FASE_CONCLUIDA
+    TEMPO_ESGOTADO
+    SEM_VIDA
+  }
+  class Partida {
+    - situacao : SituacaoDaPartida
+    + vitrine : bool
+    + inscrever(ouvinte)
+    + atualizar(dt, intencao)
+    + avancar_para_proxima_fase()
+  }
+  class Recorde {
+    - melhor_fase : int
+    + registrar(fase)
+    + ao_esgotar_tempo(fase)
+  }
+  class PontuacaoDoJogador {
+    - jogador : str
+    - pontos : int
+    + ao_concluir_fase(resultado)
+  }
+}
+
+package "infraestrutura" #FFF4E0 {
+  class RecordeEmArquivo {
+    + carregar() : int
+    + salvar(fase)
+  }
+  class PontuacoesEmSQLite {
+    + carregar_melhor(jogador, dificuldade)
+    + salvar_melhor(jogador, dificuldade, pontos, fase)
+    + ranking(dificuldade, limite)
+    + apagar / atualizar / limpar
+  }
+  class PreferenciasEmJson {
+    + carregar() : dict
+    + salvar(dados)
+  }
+  class FabricaDeAudio {
+    + {static} pre_configurar()
+    + {static} criar(pasta) : ServicoAudio
+  }
+  class AudioPygame
+  class AudioMudo
+  class LocalizadorDeRecursos {
+    + {static} detectar()
+  }
+}
+
+package "apresentacao" #EAF7EA {
+  abstract class ServicoAudio {
+    + {abstract} tocar(efeito)
+    + {abstract} iniciar_musica()
+    + {abstract} alternar_mudo()
+    + {abstract} definir_volumes(musica, efeitos)
+    + {abstract} definir_mudo(mudo)
+  }
+  abstract class RepositorioDePreferencias {
+    + {abstract} carregar() : dict
+    + {abstract} salvar(dados)
+  }
+  abstract class Controle {
+    + {abstract} direcao_desejada() : Vetor2
+    + olhar_desejado() : Vetor2
+    + tratar_evento(evento)
+  }
+  class ControleHibrido
+  class MapaDeTeclas {
+    + traduzir(evento) : Acao
+  }
+  enum Acao
+  enum Efeito
+  abstract class ContextoDoJogo {
+    + {abstract} servicos
+    + {abstract} mudar_estado(estado)
+    + {abstract} nova_partida() : Partida
+    + {abstract} ir_para_menu_principal()
+    + {abstract} abrir_pausa(jogando)
+    + {abstract} abrir_roleta(jogando, premio)
+    + {abstract} abrir_ranking(retorno)
+    + {abstract} abrir_desenvolvedor(retorno)
+    + {abstract} nova_apresentacao(tema) : Partida
+    + {abstract} encerrar()
+  }
+  class Jogo {
+    - nome_jogador : str
+    + iniciar()
+    + tratar_evento(evento)
+    + atualizar(dt)
+    + desenhar(tela)
+    + mudar_estado(estado)
+    + nova_partida() : Partida
+  }
+  class Aplicacao {
+    + executar()
+  }
+  abstract class Estado {
+    + capturando_texto : bool
+    + executar(acao)
+    + tratar_evento(evento)
+    + atualizar(dt)
+    + {abstract} desenhar(tela)
+  }
+  abstract class TelaDeMenu {
+    # {abstract} _criar_opcoes() : list[Opcao]
+    # _voltar()
+  }
+  class Opcao {
+    + rotulo : str
+    + ativar()
+    + ajustar(passos) : bool
+  }
+  class Botao
+  class Alternador
+  class Seletor
+  class Barra
+  class CampoDeTexto
+  class EstadoMenu
+  class EstadoNovoJogo
+  class EstadoConfiguracoes
+  class EstadoSom
+  class EstadoControles
+  class FundoDaPartida
+  class FontePixel {
+    + escrever(superficie, texto, escala, cor)
+  }
+  class FundoDoMenu
+  class ExplosaoDePixels
+  class EstadoRoleta
+  class EstadoEscolhaDaApresentacao
+  class EstadoRanking
+  class EstadoEditorDoRanking
+  class EstadoEdicaoDoJogador
+  class EstadoConfirmacao
+  class EstadoDesenvolvedor
+  class AbasDeDificuldade
+  class EstadoApresentacao
+  class EstadoJogando {
+    + {static} nova_corrida(jogo)
+  }
+  class EstadoPausado
+  class EstadoVitoria
+  class EstadoDerrota
+  class ServicosDoJogo <<dataclass>>
+  class Preferencias {
+    + zoom, tela_cheia, tremor, mostrar_fps
+    + volume_musica, volume_efeitos, mudo
+    + dificuldade, nome_jogador
+    + alternar_escuridao()
+    + aproximar_zoom()
+    + afastar_zoom()
+  }
+  class SonsDaPartida
+  class RitmoDePassos {
+    + atualizar(dt, andando)
+  }
+  class Cena {
+    + reagir(ocorrencias)
+    + animar_ambiente(dt)
+    + animar_jogador(dt)
+    + enquadrar(dt, olhar)
+    + desenhar(tela, com_escuridao)
+  }
+  class FabricaDeCenas {
+    + criar(fase) : Cena
+  }
+  class Cenario
+  class Camera {
+    + enquadrar(alvo, mapa, dt, velocidade, olhar)
+    + tremer(forca)
+    + ajustar_visor(largura, altura)
+  }
+  class Escuridao
+  class DesenhoDoAmbiente
+  class EfeitosDoFenomeno
+  class CorrenteDeAr
+  class CatalogoDeTemas
+  class Hud
+  class Painel
+  class Tipografia
+  class SpritesDoJogador
+}
+
+' --- Herança / realização
+GeradorDeLabirinto <|-- GeradorBacktracker
+OuvinteDaPartida <|-- Recorde
+OuvinteDaPartida <|-- PontuacaoDoJogador
+OuvinteDaPartida <|-- SonsDaPartida
+RepositorioDeRecorde <|-- RecordeEmArquivo
+RepositorioDePontuacao <|-- PontuacoesEmSQLite
+EdicaoDoRanking <|-- PontuacoesEmSQLite
+RepositorioDePontuacao ..> EntradaDoRanking
+Ambiente *-- "0..1" DesafioDaTeia
+TelaDeMenu <|-- EstadoRanking
+TelaDeMenu <|-- EstadoEditorDoRanking
+TelaDeMenu <|-- EstadoEdicaoDoJogador
+TelaDeMenu <|-- EstadoConfirmacao
+TelaDeMenu <|-- EstadoDesenvolvedor
+EstadoRanking *-- AbasDeDificuldade
+EstadoEditorDoRanking *-- AbasDeDificuldade
+EstadoEditorDoRanking ..> EdicaoDoRanking
+ServicosDoJogo o-- EdicaoDoRanking
+MapaDeColisao <|.. Labirinto
+ServicoAudio <|-- AudioPygame
+ServicoAudio <|-- AudioMudo
+Controle <|-- ControleHibrido
+ContextoDoJogo <|-- Jogo
+Estado <|-- EstadoJogando
+Estado <|-- EstadoVitoria
+Estado <|-- EstadoDerrota
+Estado <|-- TelaDeMenu
+TelaDeMenu <|-- EstadoMenu
+TelaDeMenu <|-- EstadoNovoJogo
+TelaDeMenu <|-- EstadoConfiguracoes
+TelaDeMenu <|-- EstadoSom
+TelaDeMenu <|-- EstadoControles
+TelaDeMenu <|-- EstadoPausado
+TelaDeMenu *-- "1..*" Opcao
+Opcao <|-- Botao
+Opcao <|-- Alternador
+Opcao <|-- Seletor
+Opcao <|-- Barra
+Opcao <|-- CampoDeTexto
+EstadoPausado *-- FundoDaPartida
+Estado <|-- EstadoRoleta
+EstadoRoleta *-- FundoDaPartida
+TelaDeMenu <|-- EstadoEscolhaDaApresentacao
+EstadoJogando <|-- EstadoApresentacao
+EstadoMenu *-- "0..1" ExplosaoDePixels
+RepositorioDePreferencias <|-- PreferenciasEmJson
+Preferencias o-- RepositorioDePreferencias
+Preferencias o-- ServicoAudio
+Preferencias --> NivelDeDificuldade
+Dificuldade --> NivelDeDificuldade
+ServicosDoJogo *-- FontePixel
+ServicosDoJogo *-- FundoDoMenu
+
+' --- Composição / agregação
+Partida *-- Fase
+Partida *-- Placar
+Partida o-- "0..*" OuvinteDaPartida
+Partida --> SituacaoDaPartida
+Partida ..> ResultadoDaFase
+Fase *-- Labirinto
+Fase *-- Jogador
+Fase *-- Cronometro
+Fase *-- Ambiente
+Ambiente *-- "0..*" CaixaSurpresa
+Ambiente *-- "0..*" MolaDeParede
+Ambiente *-- "0..*" Perigo
+Ambiente *-- Condicoes
+Ambiente *-- "0..1" CicloDeEvento
+Ambiente ..> Ocorrencia : cria
+Ambiente ..> Locomocao : cria
+Ambiente --> Fenomeno
+Ambiente ..> TipoDeItem : sorteia
+Partida *-- Vida
+Perigo --> TipoDePerigo
+Bioma ..> Ambiente : cria
+FabricaDeFases o-- "0..*" Bioma
+Jogador ..> Locomocao
+Labirinto *-- "2" Coordenada
+Jogador --> Direcao
+Jogador ..> MapaDeColisao : usa
+Jogador ..> Caixa
+Jogador ..> Vetor2
+FabricaDeFases o-- GeradorDeLabirinto
+FabricaDeFases o-- Dificuldade
+FabricaDeFases ..> Fase : cria
+GeradorBacktracker ..> Labirinto : cria
+Recorde o-- RepositorioDeRecorde
+PontuacaoDoJogador o-- RepositorioDePontuacao
+
+' --- Apresentação
+Aplicacao o-- Jogo
+Jogo o-- ServicosDoJogo
+Jogo ..> FabricaDeFases : cria (na dificuldade escolhida)
+Jogo o-- ServicoAudio
+Jogo o-- MapaDeTeclas
+Jogo o-- "1" Estado : estado atual
+Jogo ..> Partida : cria
+Estado o-- ContextoDoJogo
+EstadoJogando o-- Partida
+EstadoJogando o-- Cena
+EstadoPausado o-- EstadoJogando
+EstadoVitoria o-- Partida
+EstadoDerrota o-- Partida
+ServicosDoJogo *-- Hud
+ServicosDoJogo *-- Painel
+ServicosDoJogo *-- Tipografia
+ServicosDoJogo *-- FabricaDeCenas
+ServicosDoJogo *-- SpritesDoJogador
+ServicosDoJogo *-- Controle
+ServicosDoJogo *-- RitmoDePassos
+ServicosDoJogo *-- Recorde
+ServicosDoJogo *-- Preferencias
+ServicosDoJogo o-- RepositorioDePontuacao
+SonsDaPartida o-- ServicoAudio
+RitmoDePassos o-- ServicoAudio
+FabricaDeCenas ..> Cena : cria
+FabricaDeCenas o-- CatalogoDeTemas
+Cena *-- Cenario
+Cena *-- Camera
+Cena *-- Escuridao
+Cena *-- DesenhoDoAmbiente
+Cena *-- EfeitosDoFenomeno
+EfeitosDoFenomeno *-- "0..1" CorrenteDeAr
+DesenhoDoAmbiente o-- Ambiente
+Cena o-- Fase
+FabricaDeAudio ..> ServicoAudio : cria
+ServicoAudio ..> Efeito
+MapaDeTeclas ..> Acao
+@enduml

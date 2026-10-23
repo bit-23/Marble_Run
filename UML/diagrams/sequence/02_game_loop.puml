@@ -1,0 +1,45 @@
+@startuml 02_game_loop
+title Diagrama de Sequência - Game Loop (um quadro)
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam sequenceMessageAlign left
+autonumber
+
+actor Jogador
+participant "Aplicacao" as App
+participant "Jogo" as Jogo
+participant "Controle\n(ControleHibrido)" as Ctl
+participant "MapaDeTeclas" as Teclas
+participant "Estado\n(ativo)" as Est
+participant "ServicoAudio" as Aud
+
+loop enquanto not jogo.encerrado
+    App -> App : dt = min(relogio.tick(60)/1000, 0.05)
+
+    loop para cada evento pygame
+        Jogador -> App : teclado / gamepad
+        App -> Jogo : tratar_evento(evento)
+        alt evento == QUIT
+            Jogo -> Jogo : encerrar()
+        else
+            Jogo -> Ctl : tratar_evento(evento)
+            Jogo -> Est : tratar_evento(evento)
+            Jogo -> Teclas : traduzir(evento)
+            Teclas --> Jogo : Acao
+            alt Acao == ALTERNAR_SOM (fora do menu)
+                Jogo -> Aud : alternar_mudo()
+            else Acao == ALTERNAR_LUZ (fora do menu)
+                Jogo -> Jogo : preferencias.alternar_escuridao()
+            else outra Acao
+                Jogo -> Est : executar(acao)
+            end
+        end
+    end
+
+    App -> Jogo : atualizar(dt)
+    Jogo -> Est : atualizar(dt)
+    App -> Jogo : desenhar(tela)
+    Jogo -> Est : desenhar(tela)
+    App -> App : pygame.display.flip()
+end
+@enduml
