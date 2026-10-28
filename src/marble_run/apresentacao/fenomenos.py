@@ -3,6 +3,7 @@ fenomenos.py - Efeitos de tela dos fenomenos periodicos do Ambiente.
 
     Tempestade de areia -> veu cor de areia + graos riscando a tela + graos
                            grandes "batendo na cara" (deserto)
+    Tempestade de gelo  -> veu branco-azulado + flocos de neve voando (gelo)
     Rajada de vento     -> riscos de vento na direcao da rajada (vento)
     Terremoto           -> so devolve a forca do tremor para a Camera (terra)
     Erupcao             -> tremor leve (os jatos de lava sao desenhados em elementos.py)
@@ -106,6 +107,9 @@ class EfeitosDoFenomeno:
         self._corrente: CorrenteDeAr | None = None
         if ambiente.fenomeno is Fenomeno.TEMPESTADE_DE_AREIA:
             self._corrente = CorrenteDeAr((236, 200, 140), (196, 156, 96), 165, riscos=260, graos_na_cara=34)
+        elif ambiente.fenomeno is Fenomeno.TEMPESTADE_DE_GELO:
+            self._corrente = CorrenteDeAr((245, 250, 255), (200, 225, 245), 140, riscos=200, graos_na_cara=60,
+                                          velocidade=650)
         elif ambiente.fenomeno is Fenomeno.RAJADA:
             self._corrente = CorrenteDeAr((235, 242, 255), (220, 230, 245), 25, riscos=160, velocidade=1100)
 

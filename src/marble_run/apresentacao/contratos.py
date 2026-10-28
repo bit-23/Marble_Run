@@ -41,6 +41,12 @@ class Efeito(Enum):
     PREMIO = "premio"        # roleta parou
     SEGREDO = "segredo"      # codigo secreto do menu
     ERRO = "erro"            # seta errada na teia
+    MONSTRO = "monstro"      # monstro acertou o jogador
+    MAGIA = "magia"          # genio, tunel, tapete
+    GUINCHO = "guincho"      # aguia
+    SIBILO = "sibilo"        # cobra
+    BROCA = "broca"
+    EXTINTOR = "extintor"
 
 
 class ServicoAudio(ABC):

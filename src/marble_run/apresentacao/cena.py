@@ -22,11 +22,14 @@ import pygame
 
 from ..dominio.ambiente import Ocorrencia, TipoDeOcorrencia
 from ..dominio.geometria import Vetor2
-from ..dominio.labirinto import Labirinto
+from ..dominio.labirinto import Coordenada, Labirinto
 from ..dominio.partida import Fase
+from .bestiario import DesenhoDosMonstros
 from .elementos import DesenhoDoAmbiente
 from .fenomenos import EfeitosDoFenomeno
+from .icones import DESCRICOES_DOS_ITENS
 from .personagem import AnimacaoDoJogador, SpritesDoJogador
+from .pixelart import FontePixel
 from .temas import CatalogoDeTemas, Tema
 
 Deslocamento = tuple[int, int]  # canto superior esquerdo da camera, em pixels do mapa
@@ -254,6 +257,57 @@ class Cenario:
         pygame.draw.circle(tela, BRANCO, (cx, cy), max(2, r // 2))
 
 
+class TextosFlutuantes:
+    """Recados curtos que sobem da cabeca do jogador ("-5S", "ROUBOU A BLUSA!", "BLOQUEADO!")."""
+
+    DURACAO = 1.4
+
+    def __init__(self) -> None:
+        self._fonte = FontePixel()
+        self._textos: list[list] = []  # [texto, cor, tempo]
+
+    def reagir(self, ocorrencias: Iterable[Ocorrencia]) -> None:
+        for o in ocorrencias:
+            recado = self._recado(o)
+            if recado is not None:
+                self._textos.append([recado[0], recado[1], 0.0])
+
+    @staticmethod
+    def _recado(o: Ocorrencia) -> tuple[str, tuple[int, int, int]] | None:
+        nome = DESCRICOES_DOS_ITENS[o.item][0] if o.item is not None else ""
+        if o.tipo is TipoDeOcorrencia.ROUBOU_BUFF:
+            return (f"A AGUIA LEVOU: {nome}!" if nome else "A AGUIA NAO ACHOU NADA"), (255, 140, 120)
+        if o.tipo is TipoDeOcorrencia.GOLPE_BLOQUEADO:
+            return f"{nome} PROTEGEU!", (150, 240, 150)
+        if o.tipo is TipoDeOcorrencia.CAIU_NO_BURACO:
+            return f"{round(o.segundos)}S", (255, 120, 90)
+        if o.tipo is TipoDeOcorrencia.ENVENENOU:
+            return "ENVENENADO!", (140, 240, 90)
+        if o.tipo is TipoDeOcorrencia.CUROU_VENENO:
+            return "CURADO!", (150, 240, 150)
+        if o.tipo is TipoDeOcorrencia.ARREMESSADO:
+            return ("A PIPA AJUDOU!", (150, 220, 255)) if o.item else ("TORNADO!", (220, 230, 240))
+        if o.tipo is TipoDeOcorrencia.ATRAVESSOU_TUNEL:
+            return "TUNEL!", (220, 180, 120)
+        if o.tipo is TipoDeOcorrencia.QUEBROU_PAREDE:
+            return "CRACK!", (255, 200, 90)
+        if o.tipo is TipoDeOcorrencia.DESEJO_REALIZADO:
+            return ("+20S" if o.segundos else "DESEJO REALIZADO!"), (255, 220, 110)
+        return None
+
+    def atualizar(self, dt: float) -> None:
+        for texto in self._textos:
+            texto[2] += dt
+        self._textos = [t for t in self._textos if t[2] < self.DURACAO]
+
+    def desenhar(self, tela: pygame.Surface, x: int, y: int) -> None:
+        for i, (texto, cor, tempo) in enumerate(self._textos):
+            subida = round(tempo / self.DURACAO * 30)
+            if tempo > self.DURACAO * 0.7 and int(tempo * 16) % 2:
+                continue
+            self._fonte.escrever(tela, texto, 2, cor, centro=(x, y - 110 - subida - i * 18))
+
+
 class Cena:
     ALTURA_DA_LUZ = 20       # a luz fica na altura do rosto, nao dos pes
     SUAVIDADE_DA_LUZ = 5.0   # lanterna/apagao mudam a luz aos poucos
@@ -263,12 +317,19 @@ class Cena:
         TipoDeOcorrencia.PULOU: 0.3,
         TipoDeOcorrencia.CONGELOU: 0.25,
         TipoDeOcorrencia.FICOU_PRESO: 0.2,
+        TipoDeOcorrencia.MONSTRO_ATACOU: 0.6,
+        TipoDeOcorrencia.ARREMESSADO: 0.4,
+        TipoDeOcorrencia.CAIU_NO_BURACO: 0.5,
+        TipoDeOcorrencia.ATRAVESSOU_PAREDE: 0.3,
+        TipoDeOcorrencia.PUXADO: 0.3,
+        TipoDeOcorrencia.ENVENENOU: 0.2,
+        TipoDeOcorrencia.QUEBROU_PAREDE: 0.7,
     }
 
     def __init__(self, fase: Fase, cenario: Cenario, animacao: AnimacaoDoJogador,
                  camera: Camera, escuridao: Escuridao, elementos: DesenhoDoAmbiente,
                  fenomenos: EfeitosDoFenomeno, visao: PreferenciasDeVisao,
-                 tamanho_tela: tuple[int, int]) -> None:
+                 tamanho_tela: tuple[int, int], monstros: DesenhoDosMonstros | None = None) -> None:
         self._fase = fase
         self._cenario = cenario
         self._animacao = animacao
@@ -276,6 +337,9 @@ class Cena:
         self._escuridao = escuridao
         self._elementos = elementos
         self._fenomenos = fenomenos
+        self._monstros = monstros if monstros is not None else DesenhoDosMonstros(fase.ambiente, fase.labirinto)
+        self._textos = TextosFlutuantes()
+        self._luz_extra = 1.0
         self._visao = visao
         self._tamanho_tela = tamanho_tela
         self._mundo: pygame.Surface | None = None  # tela intermediaria usada com zoom
@@ -286,17 +350,24 @@ class Cena:
 
     def reagir(self, ocorrencias: Iterable[Ocorrencia]) -> None:
         """Impactos da partida viram tremor de tela (e dano vira flash vermelho)."""
+        ocorrencias = tuple(ocorrencias)
         for ocorrencia in ocorrencias:
             self._camera.tremer(self.TREMORES.get(ocorrencia.tipo, 0.0))
             if ocorrencia.dano:
                 self._flash = self.DURACAO_DO_FLASH
+        self._textos.reagir(ocorrencias)
 
     def animar_ambiente(self, dt: float) -> None:
         """Portal pulsando, neve caindo, fogo... (continua ate na tela de vitoria)."""
         self._cenario.atualizar(dt)
         self._elementos.atualizar(dt)
+        self._monstros.atualizar(dt)
+        self._textos.atualizar(dt)
         self._fenomenos.atualizar(dt)
-        self._camera.atualizar_tremor(dt, self._fenomenos.tremor(), self._visao.tremor)
+        tremor = self._fenomenos.tremor()
+        if self._fase.ambiente.perfuracao is not None:  # a broca faz tudo tremer
+            tremor = max(tremor, 0.3)
+        self._camera.atualizar_tremor(dt, tremor, self._visao.tremor)
         self._raio_da_luz += (self._raio_alvo() - self._raio_da_luz) * _suavizar(self.SUAVIDADE_DA_LUZ, dt)
         self._flash = max(0.0, self._flash - dt)
 
@@ -307,6 +378,26 @@ class Cena:
 
     def focar(self, fracao_x: float, prender_nas_bordas: bool = True) -> None:
         self._camera.focar(fracao_x, prender_nas_bordas)
+
+    def tile_na_tela(self, pos: tuple[int, int]) -> Coordenada | None:
+        """Qual tile do mapa esta embaixo deste ponto da tela (mouse). None = fora do mapa."""
+        visor, (largura, altura) = self._camera.visor, self._tamanho_tela
+        camera = self._camera.deslocamento
+        x = camera[0] + pos[0] * visor[0] / largura
+        y = camera[1] + pos[1] * visor[1] / altura
+        lab = self._fase.labirinto
+        t = lab.tamanho_tile
+        tile = Coordenada(int(x // t), int(y // t))
+        return tile if 0 <= tile.coluna < lab.colunas and 0 <= tile.linha < lab.linhas else None
+
+    def retangulo_do_tile(self, tile: Coordenada) -> pygame.Rect:
+        """Onde este tile aparece na tela (com zoom)."""
+        visor, (largura, altura) = self._camera.visor, self._tamanho_tela
+        camera = self._camera.deslocamento
+        t = self._fase.labirinto.tamanho_tile
+        kx, ky = largura / visor[0], altura / visor[1]
+        return pygame.Rect(round((tile.coluna * t - camera[0]) * kx), round((tile.linha * t - camera[1]) * ky),
+                           round(t * kx), round(t * ky))
 
     def enquadrar(self, dt: float = 0.0, olhar: Vetor2 = Vetor2(), instantaneo: bool = False) -> None:
         zoom = self._visao.zoom
@@ -323,13 +414,21 @@ class Cena:
         mundo.fill(self._cenario.cor_de_fundo)
         self._cenario.desenhar(mundo, camera)
         self._elementos.desenhar_chao(mundo, camera)
+        self._monstros.desenhar_avisos(mundo, camera)
+        self._elementos.desenhar_sob_jogador(mundo, camera, jogador)
+        self._monstros.desenhar_corpos(mundo, camera, atras_de=jogador.y)
         self._animacao.desenhar(mundo, jogador, camera)
+        self._monstros.desenhar_corpos(mundo, camera, na_frente_de=jogador.y)
         self._elementos.desenhar_sobre_jogador(mundo, camera, jogador)
+        self._monstros.desenhar_no_alto(mundo, camera)
         if com_escuridao:
             centro = (round(jogador.x) - camera[0], round(jogador.y) - camera[1] - self.ALTURA_DA_LUZ)
             self._escuridao.desenhar(mundo, centro, self._raio_da_luz)
             self._cenario.desenhar_brilho_da_saida(mundo, camera)
         self._elementos.desenhar_luzes(mundo, camera, jogador)
+        if com_escuridao:
+            self._monstros.desenhar_luzes(mundo, camera)
+        self._textos.desenhar(mundo, round(jogador.x) - camera[0], round(jogador.y) - camera[1])
         if mundo is not tela:
             pygame.transform.scale(mundo, tela.get_size(), tela)
         self._cenario.desenhar_clima(tela, camera)
@@ -342,7 +441,11 @@ class Cena:
 
     def _raio_alvo(self) -> float:
         return (self._fase.raio_visao * self._fase.ambiente.multiplicador_de_visao()
-                * self._fase.labirinto.tamanho_tile)
+                * self._fase.labirinto.tamanho_tile * self._luz_extra)
+
+    def ajustar_luz(self, fator: float) -> None:
+        """Multiplica o alcance da luz (a noite da arena usa menos de 1)."""
+        self._luz_extra = fator
 
     def _superficie_do_mundo(self, tela: pygame.Surface) -> pygame.Surface:
         """Com zoom, o mapa e desenhado em outra superficie e depois esticado para a tela."""
@@ -380,4 +483,5 @@ class FabricaDeCenas:
             EfeitosDoFenomeno(fase.ambiente),
             self._visao,
             self._tamanho_tela,
+            DesenhoDosMonstros(fase.ambiente, labirinto),
         )

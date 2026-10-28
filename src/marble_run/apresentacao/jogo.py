@@ -22,6 +22,7 @@ from .contratos import ServicoAudio
 from .desenvolvedor import EstadoDesenvolvedor
 from .entrada import Acao, MapaDeTeclas
 from .estados import ContextoDoJogo, Estado, EstadoJogando
+from .genio import EstadoDesejos
 from .menus import EstadoMenu, EstadoPausado
 from .ranking import EstadoRanking
 from .roleta import EstadoRoleta
@@ -88,6 +89,9 @@ class Jogo(ContextoDoJogo):
 
     def abrir_roleta(self, jogando: EstadoJogando, premio: TipoDeItem) -> None:
         self.mudar_estado(EstadoRoleta(self, jogando, premio))
+
+    def abrir_desejos(self, jogando: EstadoJogando) -> None:
+        self.mudar_estado(EstadoDesejos(self, jogando))
 
     def abrir_ranking(self, retorno: Estado) -> None:
         self.mudar_estado(EstadoRanking(self, retorno))

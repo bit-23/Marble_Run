@@ -7,8 +7,8 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from marble_run.dominio.ambiente import (  # noqa: E402
-    Ambiente, CaixaSurpresa, CicloDeEvento, Condicao, Fenomeno, MolaDeParede, Ocorrencia, Perigo, TipoDeItem,
-    TipoDeOcorrencia, TipoDePerigo,
+    CICLOS_DOS_FENOMENOS, ITENS_COMUNS, Ambiente, CaixaSurpresa, CicloDeEvento, Condicao, Fenomeno, MolaDeParede,
+    Ocorrencia, Perigo, TipoDeItem, TipoDeOcorrencia, TipoDePerigo,
 )
 from marble_run.dominio.biomas import Bioma  # noqa: E402
 from marble_run.dominio.contratos import OuvinteDaPartida  # noqa: E402
@@ -68,6 +68,12 @@ def tipos(ocorrencias) -> list:
 
 def criar_fase(lab: Labirinto, jogador: Jogador, ambiente: Ambiente, tempo: float = 60.0) -> Fase:
     return Fase(1, 0, "teste", lab, jogador, Cronometro(tempo), 5.0, ambiente)
+
+
+def avancar_ate_o_meio_do_fenomeno(amb: Ambiente, jogador: Jogador) -> None:
+    intervalo, duracao, _ = CICLOS_DOS_FENOMENOS[amb.fenomeno]
+    for _ in range(int((intervalo - duracao / 2) / DT)):
+        amb.atualizar(DT, jogador)
 
 
 class TesteMovimento(unittest.TestCase):
@@ -281,13 +287,13 @@ class TestePerigos(unittest.TestCase):
 class TesteCaixaSurpresa(unittest.TestCase):
     def test_caixa_sorteia_um_premio_do_mapa_e_aplica(self):
         lab = labirinto()
-        premios = ((TipoDeItem.BANANA, 1),)
+        premios = ((TipoDeItem.CAFE, 1),)
         amb = Ambiente(lab, caixas=[caixa(lab, 2, 3)], premios=premios)
         fase = criar_fase(lab, jogador_em(lab, 1, 3), amb)
         ocorrencias = [o for o in andar(fase, Vetor2(1, 0), 0.4) if o.tipo is TipoDeOcorrencia.CAIXA_ABERTA]
         self.assertEqual(len(ocorrencias), 1, "a caixa abre uma vez so")
-        self.assertIs(ocorrencias[0].item, TipoDeItem.BANANA)
-        self.assertTrue(amb.condicao_ativa(Condicao.BANANA))
+        self.assertIs(ocorrencias[0].item, TipoDeItem.CAFE)
+        self.assertTrue(amb.condicao_ativa(Condicao.CAFE))
         self.assertTrue(amb.caixas[0].aberta)
 
     def test_relogio_da_tempo_sem_passar_do_total(self):
@@ -298,21 +304,55 @@ class TesteCaixaSurpresa(unittest.TestCase):
         self.assertGreater(fase.tempo_restante, 29.8)
         self.assertLessEqual(fase.tempo_restante, 30)
 
-    def test_lanterna_aumenta_visao_e_banana_acelera(self):
+    def test_lanterna_aumenta_visao_e_cafe_acelera(self):
         amb = Ambiente(labirinto())
         amb.aplicar_premio(TipoDeItem.LANTERNA)
-        amb.aplicar_premio(TipoDeItem.BANANA)
+        amb.aplicar_premio(TipoDeItem.CAFE)
         self.assertAlmostEqual(amb.multiplicador_de_visao(), Ambiente.VISAO_LANTERNA)
-        self.assertAlmostEqual(amb.locomocao().multiplicador, Ambiente.VELOCIDADE_BANANA)
+        self.assertAlmostEqual(amb.locomocao().multiplicador, Ambiente.VELOCIDADE_CAFE)
 
     def test_efeito_acaba_com_o_tempo(self):
         lab = labirinto()
         amb = Ambiente(lab)
-        amb.aplicar_premio(TipoDeItem.BANANA)
+        amb.aplicar_premio(TipoDeItem.CAFE)
         j = jogador_em(lab, 1, 3)
-        for _ in range(int(6 / DT)):
+        for _ in range(int(9 / DT)):
             amb.atualizar(DT, j)
-        self.assertFalse(amb.condicao_ativa(Condicao.BANANA))
+        self.assertFalse(amb.condicao_ativa(Condicao.CAFE))
+
+    def test_itens_comuns_sao_relogio_coracao_e_estrela(self):
+        self.assertEqual({tipo for tipo, _ in ITENS_COMUNS},
+                         {TipoDeItem.RELOGIO, TipoDeItem.CORACAO, TipoDeItem.ESTRELA})
+        self.assertNotIn("BANANA", TipoDeItem.__members__)
+
+    def test_coracao_cura_e_com_vida_cheia_some(self):
+        partida = Partida(_FabricaCalma())
+        partida.vida.perder(1)
+        partida.fase.aplicar_premio(TipoDeItem.CORACAO)
+        partida.atualizar(DT, Vetor2())
+        self.assertEqual(partida.vida.coracoes, partida.vida.maximo)
+
+        partida.fase.ganhar_tempo(-20)
+        antes = partida.fase.tempo_restante
+        partida.fase.aplicar_premio(TipoDeItem.CORACAO)
+        partida.atualizar(DT, Vetor2())
+        self.assertEqual(partida.vida.coracoes, partida.vida.maximo)
+        self.assertAlmostEqual(partida.fase.tempo_restante, antes - DT, places=3, msg="vida cheia: nao vira tempo")
+
+    def test_roleta_evita_repetir(self):
+        lab = labirinto()
+        premios = ((TipoDeItem.RELOGIO, 1), (TipoDeItem.CORACAO, 1), (TipoDeItem.ESTRELA, 1))
+        amb = Ambiente(lab, premios=premios, sorteio=random.Random(5))
+        sorteados = [amb.sortear_premio() for _ in range(300)]
+        repetidos = sum(a is b for a, b in zip(sorteados, sorteados[1:]))
+        self.assertLess(repetidos / 299, 0.12, "sem memoria seria ~33% de repeticao seguida")
+        self.assertEqual(set(sorteados), {t for t, _ in premios})
+
+    def test_historico_da_roleta_passa_de_uma_fase_para_outra(self):
+        fabrica = FabricaDeFases(GeradorBacktracker(), Dificuldade(), ["vento"], random.Random(3),
+                                 biomas={"vento": Bioma.ventoso()})
+        primeira = fabrica.criar(1).ambiente.sortear_premio()
+        self.assertIn(primeira, fabrica.criar(2).ambiente._historico.ultimos)  # noqa: SLF001
 
 
 class TesteFenomenos(unittest.TestCase):
@@ -338,20 +378,33 @@ class TesteFenomenos(unittest.TestCase):
         j = jogador_em(lab, 1, 3)
         tempestade = Ambiente(lab, fenomeno=Fenomeno.TEMPESTADE_DE_AREIA)
         apagao = Ambiente(lab, fenomeno=Fenomeno.APAGAO)
-        for _ in range(int(9.5 / DT)):
-            tempestade.atualizar(DT, j)
-        for _ in range(int(12.5 / DT)):
-            apagao.atualizar(DT, j)
+        avancar_ate_o_meio_do_fenomeno(tempestade, j)
+        avancar_ate_o_meio_do_fenomeno(apagao, j)
         self.assertLess(tempestade.locomocao().multiplicador, 0.6)
         self.assertLess(apagao.multiplicador_de_visao(), 0.5)
+
+    def test_tempestade_de_gelo_deixa_lento_e_cafe_protege(self):
+        lab = labirinto()
+        j = jogador_em(lab, 1, 3)
+        nevasca = Ambiente(lab, fenomeno=Fenomeno.TEMPESTADE_DE_GELO)
+        avancar_ate_o_meio_do_fenomeno(nevasca, j)
+        self.assertAlmostEqual(nevasca.locomocao().multiplicador, 1 - Ambiente.LENTIDAO_NEVASCA)
+        nevasca.aplicar_premio(TipoDeItem.CAFE)
+        self.assertTrue(nevasca.fenomeno_neutralizado)
+        self.assertAlmostEqual(nevasca.locomocao().multiplicador, Ambiente.VELOCIDADE_CAFE)
 
     def test_rajada_empurra(self):
         lab = labirinto()
         amb = Ambiente(lab, fenomeno=Fenomeno.RAJADA, sorteio=random.Random(1))
-        j = jogador_em(lab, 1, 3)
-        for _ in range(int(8.0 / DT)):
-            amb.atualizar(DT, j)
+        avancar_ate_o_meio_do_fenomeno(amb, jogador_em(lab, 1, 3))
         self.assertFalse(amb.locomocao().arrasto.eh_nulo)
+
+    def test_fenomenos_mais_espacados_principalmente_a_erupcao(self):
+        intervalos = {f: ciclo[0] for f, ciclo in CICLOS_DOS_FENOMENOS.items()}
+        self.assertGreaterEqual(intervalos[Fenomeno.ERUPCAO], 11.0)
+        self.assertLessEqual(Ambiente.JATOS_DE_LAVA, 3)
+        self.assertLessEqual(Ambiente.ALCANCE_DA_ERUPCAO, 3)
+        self.assertIn(Fenomeno.TEMPESTADE_DE_GELO, intervalos)
 
 
 # ======================================================================
@@ -363,6 +416,8 @@ class _AmbienteEmChamas(Ambiente):
 
 
 class _FabricaFixa:
+    em_arena = False
+
     def __init__(self, vitrine=False):
         self.vitrine = vitrine
         self.dificuldade = Dificuldade()
@@ -370,6 +425,12 @@ class _FabricaFixa:
     def criar(self, numero):
         lab = labirinto()
         return Fase(numero, 0, "teste", lab, jogador_em(lab, 1, 3), Cronometro(60), 5.0, _AmbienteEmChamas(lab))
+
+
+class _FabricaCalma(_FabricaFixa):
+    def criar(self, numero):
+        lab = labirinto()
+        return Fase(numero, 0, "teste", lab, jogador_em(lab, 1, 3), Cronometro(60), 5.0, Ambiente(lab))
 
 
 class _Ouvinte(OuvinteDaPartida):
@@ -413,21 +474,73 @@ class TesteBiomas(unittest.TestCase):
         self.assertNotIn(lab.entrada, ocupados)
         self.assertNotIn(lab.saida, ocupados)
         self.assertEqual({p.tipo for p in a.perigos}, {TipoDePerigo.AGUA, TipoDePerigo.GELO})
-        self.assertTrue({TipoDeItem.BLUSA, TipoDeItem.BANANA} <= set(a.premios))
+        self.assertTrue({TipoDeItem.BLUSA, TipoDeItem.CAFE} <= set(a.premios))
         self.assertIsNone(a.locomocao().aderencia, "o gelo nao escorrega mais no mapa inteiro")
 
-    def test_molas_em_pares_dos_dois_lados_de_uma_parede(self):
+    def test_gelo_tem_tempestade_de_gelo(self):
         lab = GeradorBacktracker().gerar(12, 8, random.Random(5))
-        amb = Bioma.masmorra().criar_ambiente(lab, random.Random(1))
-        self.assertGreaterEqual(len(amb.molas), 2)
-        self.assertEqual(len(amb.molas) % 2, 0)
+        self.assertIs(Bioma.gelado().criar_ambiente(lab, random.Random(1), fase=5).fenomeno,
+                      Fenomeno.TEMPESTADE_DE_GELO)
+
+    def test_itens_exclusivos_de_cada_mapa(self):
+        exclusivos = {"gelo": (Bioma.gelado(), {TipoDeItem.BLUSA, TipoDeItem.CAFE}),
+                      "deserto": (Bioma.desertico(), {TipoDeItem.FLAUTA, TipoDeItem.TAPETE, TipoDeItem.GENIO}),
+                      "masmorra": (Bioma.masmorra(), {TipoDeItem.LANTERNA, TipoDeItem.BUSSOLA}),
+                      "fogo": (Bioma.vulcanico(), {TipoDeItem.EXTINTOR, TipoDeItem.BOTA}),
+                      "terra": (Bioma.terroso(), {TipoDeItem.BROCA, TipoDeItem.CAPACETE}),
+                      "vento": (Bioma.ventoso(), {TipoDeItem.GUARDA_CHUVA, TipoDeItem.PIPA})}
+        comuns = {TipoDeItem.RELOGIO, TipoDeItem.CORACAO, TipoDeItem.ESTRELA}
+        for nome, (bioma, proprios) in exclusivos.items():
+            self.assertEqual({tipo for tipo, _ in bioma.premios()}, comuns | proprios, nome)
+
+    def test_molas_so_na_masmorra_so_de_ida_e_longe_do_portal(self):
+        lab = GeradorBacktracker().gerar(14, 10, random.Random(5))
+        for bioma in (Bioma.gelado(), Bioma.desertico(), Bioma.vulcanico(), Bioma.terroso(), Bioma.ventoso()):
+            self.assertEqual(bioma.criar_ambiente(lab, random.Random(1), fase=8).molas, ())
+        amb = Bioma.masmorra().criar_ambiente(lab, random.Random(1), fase=8)
+        self.assertGreaterEqual(len(amb.molas), 1)
+        ida = {(m.tile, m.destino) for m in amb.molas}
+        saida = lab.saida
         for mola in amb.molas:
             a, b = mola.tile, mola.destino
             meio = ((a.coluna + b.coluna) // 2, (a.linha + b.linha) // 2)
             self.assertFalse(lab.eh_parede(*a))
             self.assertFalse(lab.eh_parede(*b))
             self.assertTrue(lab.eh_parede(*meio))
-            self.assertIn((b, a), {(m.tile, m.destino) for m in amb.molas}, "tem a mola de volta")
+            self.assertNotIn((b, a), ida, "mola so de ida: nao tem a de volta")
+            for tile in (a, b):
+                self.assertGreaterEqual(abs(tile.coluna - saida.coluna) + abs(tile.linha - saida.linha),
+                                        Bioma.masmorra().distancia_do_portal)
+
+    def test_caixas_bem_distribuidas_e_longe_umas_das_outras(self):
+        lab = GeradorBacktracker().gerar(30, 20, random.Random(7))
+        bioma = Bioma.ventoso()
+        chao = sum(not lab.eh_parede(c, l) for l in range(lab.linhas) for c in range(lab.colunas))
+        for semente in range(5):
+            caixas = [c.tile for c in bioma.criar_ambiente(lab, random.Random(semente), fase=8).caixas]
+            self.assertLessEqual(len(caixas), 2 + chao // bioma.tiles_por_caixa)
+            self.assertGreaterEqual(len(caixas), 6, "mapa grande: varias caixas")
+            for i, a in enumerate(caixas):
+                for b in caixas[i + 1:]:
+                    self.assertGreaterEqual(abs(a.coluna - b.coluna) + abs(a.linha - b.linha),
+                                            bioma.distancia_entre_caixas)
+
+    def test_placas_de_gelo_espalhadas(self):
+        lab = GeradorBacktracker().gerar(30, 20, random.Random(2))
+        regra = next(r for r in Bioma.gelado().perigos if r.tipo is TipoDePerigo.GELO)
+        amb = Bioma.gelado().criar_ambiente(lab, random.Random(3), fase=12)
+        placas = [p.tile for p in amb.perigos if p.tipo is TipoDePerigo.GELO]
+        trechos: list[set] = []  # junta placas vizinhas em trechos
+        for tile in placas:
+            vizinhos = [t for t in trechos if any(abs(tile.coluna - o.coluna) + abs(tile.linha - o.linha) == 1
+                                                  for o in t)]
+            novo = {tile}.union(*vizinhos)
+            trechos = [t for t in trechos if t not in vizinhos] + [novo]
+        for i, a in enumerate(trechos):
+            self.assertLessEqual(len(a), regra.tamanho_maximo)
+            for b in trechos[i + 1:]:
+                menor = min(abs(x.coluna - y.coluna) + abs(x.linha - y.linha) for x in a for y in b)
+                self.assertGreaterEqual(menor, regra.distancia_minima)
 
     def test_placas_de_gelo_formam_trechos(self):
         lab = GeradorBacktracker().gerar(20, 14, random.Random(2))
@@ -449,7 +562,7 @@ class TesteBiomas(unittest.TestCase):
         fogo = FabricaDeFases(GeradorBacktracker(), Dificuldade(), ["fogo"], random.Random(3), biomas=biomas).criar(5)
         self.assertIs(fogo.ambiente.fenomeno, Fenomeno.ERUPCAO)
         self.assertEqual({p.tipo for p in fogo.ambiente.perigos}, {TipoDePerigo.FOGO})
-        self.assertIn(TipoDeItem.FLAUTA, fogo.ambiente.premios)
+        self.assertNotIn(TipoDeItem.FLAUTA, fogo.ambiente.premios, "a flauta agora e so do deserto")
 
     def test_vitrine_tudo_perto_da_entrada_e_sem_limite_de_tempo(self):
         for tema, bioma in (("gelo", Bioma.gelado()), ("deserto", Bioma.desertico()), ("fogo", Bioma.vulcanico()),
@@ -534,19 +647,45 @@ class TesteCurvaDeDificuldade(unittest.TestCase):
         """Segundos dados para cada tile do caminho perfeito (quanto maior, mais tranquilo)."""
         return self.d.tempo_limite(fase, 30 * 56, 210) / 30
 
-    def test_primeiras_fases_tranquilas_e_depois_piora_ate_a_fase_12(self):
+    def test_primeiras_fases_tranquilas_e_depois_piora_ate_a_fase_10(self):
         folgas = [self.folga_por_tile(f) for f in range(1, 16)]
         self.assertEqual(folgas[0], folgas[2], "fases 1 a 3 com a mesma folga (tranquilas)")
-        for anterior, seguinte in zip(folgas[2:12], folgas[3:12]):
-            self.assertLess(seguinte, anterior, "da fase 3 a 12 o tempo aperta a cada fase")
-        self.assertEqual(folgas[11], folgas[14], "depois da 12 fica no maximo")
-        self.assertGreater(folgas[0], 2 * folgas[11])
+        for anterior, seguinte in zip(folgas[2:10], folgas[3:10]):
+            self.assertLess(seguinte, anterior, "da fase 3 a 10 o tempo aperta a cada fase")
+        self.assertEqual(folgas[9], folgas[14], "depois da 10 fica no maximo")
+        self.assertGreater(folgas[0], 1.6 * folgas[9])
 
     def test_luz_diminui_e_perigos_aumentam(self):
         self.assertGreater(self.d.raio_visao(1), self.d.raio_visao(6))
-        self.assertGreater(self.d.raio_visao(6), self.d.raio_visao(12))
-        self.assertLess(self.d.perigos(1), 0.5)
-        self.assertGreater(self.d.perigos(12), self.d.perigos(6))
+        self.assertGreater(self.d.raio_visao(6), self.d.raio_visao(10))
+        self.assertLessEqual(self.d.perigos(1), 0.6)
+        self.assertGreater(self.d.perigos(10), self.d.perigos(6))
+
+    def test_cada_nivel_e_mais_dificil_que_o_anterior(self):
+        niveis = [Dificuldade.do_nivel(n) for n in NivelDeDificuldade]
+        for fase in (1, 5, 10):
+            tempos = [d.tempo_limite(fase, 30 * 56, 210) for d in niveis]
+            self.assertEqual(tempos, sorted(tempos, reverse=True), f"menos tempo a cada nivel (fase {fase})")
+            luzes = [d.raio_visao(fase) for d in niveis]
+            self.assertEqual(luzes, sorted(luzes, reverse=True), f"menos luz a cada nivel (fase {fase})")
+            perigos = [d.perigos(fase) for d in niveis]
+            self.assertEqual(perigos, sorted(perigos), f"mais perigos a cada nivel (fase {fase})")
+        self.assertEqual([d.monstros(3) for d in niveis], [0, 0, 1, 3], "monstros chegam mais cedo")
+        self.assertEqual([d.coracoes for d in niveis], [3, 3, 3, 2])
+        self.assertEqual([d.cura_por_fase for d in niveis], [1, 1, 0, 0])
+        tamanhos = [d.tamanho(1)[0] * d.tamanho(1)[1] for d in niveis]
+        self.assertEqual(tamanhos, sorted(tamanhos), "labirinto comeca maior nos niveis dificeis")
+
+    def test_insano_comeca_com_2_coracoes_e_dificil_nao_cura(self):
+        for nivel, coracoes in ((NivelDeDificuldade.INSANO, 2), (NivelDeDificuldade.DIFICIL, 3)):
+            fabrica = FabricaDeFases(GeradorBacktracker(), Dificuldade.do_nivel(nivel), ["terra"],
+                                     random.Random(1), biomas={"terra": Bioma.terroso()})
+            partida = Partida(fabrica)
+            self.assertEqual(partida.vida.maximo, coracoes)
+            partida.vida.perder(1)
+            partida._concluir_fase()  # noqa: SLF001
+            partida.avancar_para_proxima_fase()
+            self.assertEqual(partida.vida.coracoes, coracoes - 1, "sair do labirinto nao devolve coracao")
 
     def test_labirinto_comeca_pequeno_e_cresce(self):
         tamanhos = [self.d.tamanho(f) for f in range(1, 40)]
@@ -593,10 +732,10 @@ class TesteErupcao(unittest.TestCase):
     def test_lava_queima_quem_ficar_em_cima_e_flauta_protege(self):
         for com_flauta in (False, True):
             lab, amb, jogador = self.preparar()
-            if com_flauta:
-                amb.aplicar_premio(TipoDeItem.FLAUTA)
             while not amb.ciclo.em_aviso:
                 amb.atualizar(DT, jogador)
+            if com_flauta:
+                amb.aplicar_premio(TipoDeItem.FLAUTA)
             alvo = amb.jatos_de_lava[0]
             x, y = lab.centro_do_tile(alvo)
             jogador.posicionar(x, y + Jogador.ALTURA_DOS_PES, lab)

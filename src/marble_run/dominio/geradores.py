@@ -12,7 +12,7 @@ import random
 from abc import ABC, abstractmethod
 from collections import deque
 
-from .labirinto import Coordenada, Labirinto
+from .labirinto import Coordenada, Labirinto, LabirintoEditavel
 
 VIZINHOS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -52,7 +52,7 @@ class GeradorBacktracker(GeradorDeLabirinto):
         self._abrir_lacos(grade, rng)
         entrada = Coordenada(inicio[0] * 2 + 1, inicio[1] * 2 + 1)
         saida, distancia = self._escolher_saida(grade, entrada, rng)
-        return Labirinto(grade, entrada, saida, distancia)
+        return LabirintoEditavel(grade, entrada, saida, distancia)  # editavel: a broca quebra paredes
 
     # ------------------------------------------------------------------
     # Etapas do algoritmo
@@ -113,3 +113,18 @@ class GeradorBacktracker(GeradorDeLabirinto):
                     dist[p] = dist[(x, y)] + 1
                     fila.append(p)
         return dist
+
+
+class GeradorArena(GeradorDeLabirinto):
+    """ARENA do teste dos mapas: um quadrado aberto e EDITAVEL (so as bordas sao parede).
+
+    Aqui colunas/linhas = tiles de CHAO (nao celulas). Entrada no meio da esquerda,
+    portal no meio da direita.
+    """
+
+    def gerar(self, colunas: int, linhas: int, rng: random.Random) -> LabirintoEditavel:
+        largura, altura = colunas + 2, linhas + 2
+        grade = [[x in (0, largura - 1) or y in (0, altura - 1) for x in range(largura)] for y in range(altura)]
+        meio = altura // 2
+        entrada, saida = Coordenada(2, meio), Coordenada(largura - 3, meio)
+        return LabirintoEditavel(grade, entrada, saida, saida.coluna - entrada.coluna)

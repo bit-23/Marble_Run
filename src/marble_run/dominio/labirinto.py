@@ -103,3 +103,41 @@ class Labirinto:
         centro_x, centro_y = self.centro_do_tile(self._saida)
         lado = self._tile - 16
         return Caixa.pelo_centro(centro_x, centro_y, lado, lado)
+
+
+class LabirintoEditavel(Labirinto):
+    """Mapa da ARENA (teste dos mapas): da para levantar/derrubar paredes e mudar o portal de lugar.
+
+    A borda e a entrada nunca mudam, assim ninguem escapa do mapa nem fica preso fora dele.
+    """
+
+    def __init__(self, paredes: Sequence[Sequence[bool]], entrada: Coordenada,
+                 saida: Coordenada, distancia_minima: int, tamanho_tile: int = TAMANHO_TILE) -> None:
+        super().__init__(paredes, entrada, saida, distancia_minima, tamanho_tile)
+        self._grade = [list(linha) for linha in self._paredes]
+
+    def eh_parede(self, coluna: int, linha: int) -> bool:
+        if coluna < 0 or linha < 0 or coluna >= self._colunas or linha >= self._linhas:
+            return True
+        return self._grade[linha][coluna]
+
+    def na_borda(self, tile: Coordenada) -> bool:
+        return tile.coluna <= 0 or tile.linha <= 0 or tile.coluna >= self._colunas - 1 or tile.linha >= self._linhas - 1
+
+    def colocar_parede(self, tile: Coordenada) -> bool:
+        if self.na_borda(tile) or tile in (self._entrada, self._saida) or self.eh_parede(*tile):
+            return False
+        self._grade[tile.linha][tile.coluna] = True
+        return True
+
+    def remover_parede(self, tile: Coordenada) -> bool:
+        if self.na_borda(tile) or not self.eh_parede(*tile):
+            return False
+        self._grade[tile.linha][tile.coluna] = False
+        return True
+
+    def mover_saida(self, tile: Coordenada) -> bool:
+        if self.na_borda(tile) or self.eh_parede(*tile) or tile == self._entrada:
+            return False
+        self._saida = tile
+        return True

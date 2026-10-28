@@ -125,7 +125,10 @@ class EstadoRoleta(Estado):
 
     # ------------------------------------------------------------------
     def _voltar_ao_jogo(self) -> None:
-        self._jogo.mudar_estado(self._jogando)
+        if self._premio is TipoDeItem.GENIO:  # o genio saiu da lampada: hora de escolher o desejo
+            self._jogo.abrir_desejos(self._jogando)
+        else:
+            self._jogo.mudar_estado(self._jogando)
 
     def _montar_fatias(self, premios: tuple[TipoDeItem, ...], premio: TipoDeItem) -> list[TipoDeItem]:
         fatias = list(premios) or [premio]

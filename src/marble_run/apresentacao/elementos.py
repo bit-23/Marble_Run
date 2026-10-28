@@ -13,10 +13,10 @@ import math
 
 import pygame
 
-from ..dominio.ambiente import Ambiente, Condicao, MolaDeParede, Perigo, TipoDePerigo
+from ..dominio.ambiente import Ambiente, Condicao, MolaDeParede, Perigo, TipoDeItem, TipoDePerigo
 from ..dominio.jogador import Direcao, Jogador
 from ..dominio.labirinto import Labirinto
-from .icones import icone_da_caixa
+from .icones import icone, icone_da_caixa
 
 Deslocamento = tuple[int, int]
 Cor = tuple[int, int, int]
@@ -25,7 +25,7 @@ TAMANHO_DA_CAIXA = 30
 AVISO_DO_FOGO = 0.5     # segundos de "faisca" antes de a chama acender
 MOLA_COMPRIMIDA = 0.25  # segundos que a mola fica encolhida depois de lancar
 GIRO_DA_MOLA = {Direcao.CIMA: 0, Direcao.ESQUERDA: 90, Direcao.BAIXO: 180, Direcao.DIREITA: -90}
-ORDEM_DOS_PERIGOS = {TipoDePerigo.GELO: 0}  # placas de gelo por baixo de todo o resto
+ORDEM_DOS_PERIGOS = {TipoDePerigo.GELO: 0, TipoDePerigo.BURACO: 0}  # por baixo de todo o resto
 
 
 def criar_halo(raio: int, cor: Cor) -> pygame.Surface:
@@ -56,8 +56,8 @@ class DesenhoDoAmbiente:
         self._halo_do_fogo = criar_halo(int(t * 1.3), (255, 110, 30))
         self._sombra = pygame.Surface((24, 8), pygame.SRCALPHA)
         pygame.draw.ellipse(self._sombra, (0, 0, 0, 90), self._sombra.get_rect())
-        self._perigos_em_ordem = sorted(ambiente.perigos, key=lambda p: ORDEM_DOS_PERIGOS.get(p.tipo, 1))
         self._erros_vistos = 0
+        self._direcao_do_jogador = Direcao.BAIXO
         self._tremor_da_teia = 0.0
 
     def atualizar(self, dt: float) -> None:
@@ -70,10 +70,16 @@ class DesenhoDoAmbiente:
         self._tremor_da_teia = max(0.0, self._tremor_da_teia - dt)
 
     def _desenhar_setas_da_teia(self, tela: pygame.Surface, x: int, y: int) -> None:
-        """Baloes com a sequencia: verdes = acertadas, a proxima pula e brilha."""
+        """Baloes com a sequencia: verdes = acertadas, a proxima pula e brilha (veneno: barra de tempo)."""
         desafio = self._ambiente.desafio_da_teia
         tamanho, espaco = 26, 6
         largura = len(desafio.sequencia) * (tamanho + espaco) - espaco
+        if self._ambiente.envenenado:
+            fracao = self._ambiente.veneno_restante / Ambiente.TEMPO_DO_VENENO
+            barra = pygame.Rect(x - largura // 2, y + tamanho + 6, largura, 6)
+            pygame.draw.rect(tela, (20, 12, 30), barra.inflate(4, 4), border_radius=3)
+            pygame.draw.rect(tela, (120, 230, 80), (barra.x, barra.y, round(barra.w * fracao), barra.h),
+                             border_radius=3)
         tremor = round(math.sin(self._tempo * 60) * 4) if self._tremor_da_teia > 0 else 0
         inicio = x - largura // 2 + tremor
         for i, direcao in enumerate(desafio.sequencia):
@@ -103,14 +109,21 @@ class DesenhoDoAmbiente:
     # ------------------------------------------------------------------
     def desenhar_chao(self, tela: pygame.Surface, camera: Deslocamento) -> None:
         visivel = tela.get_rect().inflate(self._tile * 2, self._tile * 2)
-        for perigo in self._perigos_em_ordem:
+        for perigo in sorted(self._ambiente.perigos, key=lambda p: ORDEM_DOS_PERIGOS.get(p.tipo, 1)):
             x, y = perigo.centro[0] - camera[0], perigo.centro[1] - camera[1]
             if perigo.ativo and visivel.collidepoint(x, y):
                 self._desenhar_perigo(tela, perigo, x, y)
+        tempo = self._ambiente.tempo
+        for rastro in sorted(self._ambiente.rastros, key=lambda p: ORDEM_DOS_PERIGOS.get(p.tipo, 1)):
+            x, y = rastro.centro[0] - camera[0], rastro.centro[1] - camera[1]
+            sumindo = rastro.expira_em is not None and rastro.expira_em - tempo < 1.0
+            if visivel.collidepoint(x, y) and not (sumindo and int(self._tempo * 10) % 2):
+                self._desenhar_perigo(tela, rastro, x, y)
 
         for mola in self._ambiente.molas:
             self._desenhar_mola(tela, mola, camera, visivel)
         self._desenhar_erupcao(tela, camera)
+        self._desenhar_parede_quebrando(tela, camera)
 
         for indice, surpresa in enumerate(self._ambiente.caixas):
             x, y = surpresa.centro[0] - camera[0], surpresa.centro[1] - camera[1]
@@ -118,6 +131,12 @@ class DesenhoDoAmbiente:
                 continue
             pulo = 3 * math.sin(self._tempo * 3 + indice)
             tela.blit(self._sombra, self._sombra.get_rect(center=(x, y + 13)))
+            if surpresa.conteudo is not None:  # item largado no chao (arena): o proprio icone flutuando
+                brilho = 0.5 + 0.5 * math.sin(self._tempo * 4 + indice)
+                pygame.draw.circle(tela, (255, 240, 170), (x, round(y - 4 + pulo)), round(13 + 3 * brilho), 1)
+                img = icone(surpresa.conteudo, 26)
+                tela.blit(img, img.get_rect(center=(x, round(y - 4 + pulo))))
+                continue
             img = icone_da_caixa(TAMANHO_DA_CAIXA)
             tela.blit(img, img.get_rect(center=(x, round(y - 4 + pulo))))
             if int(self._tempo * 4 + indice) % 4 == 0:  # brilhinho piscando
@@ -203,6 +222,18 @@ class DesenhoDoAmbiente:
         elif perigo.tipo is TipoDePerigo.FOGO:
             tela.blit(self._cinzas, self._cinzas.get_rect(center=(x, y + 6)))
             self._desenhar_fogo(tela, perigo, x, y)
+        elif perigo.tipo is TipoDePerigo.LAVA:
+            pygame.draw.ellipse(tela, (110, 25, 5), (x - 20, y - 9, 40, 22))
+            pygame.draw.ellipse(tela, (240, 90, 20), (x - 17, y - 7, 34, 17))
+            pygame.draw.ellipse(tela, (255, 190, 70), (x - 9, y - 4, 16, 8))
+            k = (self._tempo * 2 + x * 0.01) % 1.0  # bolha estourando
+            pygame.draw.circle(tela, (255, 200, 90), (x + 6, y - round(3 * k)), round(1 + 3 * k), 1)
+        elif perigo.tipo is TipoDePerigo.BURACO:
+            pygame.draw.ellipse(tela, (90, 60, 35), (x - 19, y - 9, 38, 22))
+            pygame.draw.ellipse(tela, (15, 10, 8), (x - 14, y - 6, 28, 15))
+            for i in range(5):  # terra em volta
+                a = i * 1.26
+                pygame.draw.circle(tela, (110, 80, 50), (round(x + math.cos(a) * 19), round(y + 2 + math.sin(a) * 9)), 3)
 
     def _desenhar_fogo(self, tela: pygame.Surface, perigo: Perigo, x: int, y: int) -> None:
         if self._ambiente.fogo_apagado:  # flauta: so fumacinha
@@ -241,14 +272,37 @@ class DesenhoDoAmbiente:
     # ------------------------------------------------------------------
     # Camada sobre o jogador
     # ------------------------------------------------------------------
+    def desenhar_sob_jogador(self, tela: pygame.Surface, camera: Deslocamento, jogador: Jogador) -> None:
+        """Tapete magico embaixo dos pes e buraco de quem caiu."""
+        amb = self._ambiente
+        x, y = round(jogador.x) - camera[0], round(jogador.y) - camera[1]
+        if amb.condicao_ativa(Condicao.CAIDO):
+            pygame.draw.ellipse(tela, (15, 10, 8), (x - 20, y - 8, 40, 16))
+            pygame.draw.ellipse(tela, (110, 80, 50), (x - 22, y - 9, 44, 18), 3)
+        if amb.condicao_ativa(Condicao.TAPETE):
+            flutua = round(math.sin(self._tempo * 4) * 2) - 4
+            pontos = [(x - 26 + i * 4, y + flutua + round(math.sin(self._tempo * 8 + i * 0.7) * 2)) for i in range(14)]
+            base = [(px, py + 12) for px, py in reversed(pontos)]
+            pygame.draw.polygon(tela, (120, 40, 140), pontos + base)
+            pygame.draw.lines(tela, (240, 200, 80), False, pontos, 2)
+            pygame.draw.lines(tela, (240, 200, 80), False, base, 2)
+            for px, py in pontos[::3]:  # franjas
+                pygame.draw.line(tela, (240, 200, 80), (px, py + 12), (px, py + 16), 1)
+
     def desenhar_sobre_jogador(self, tela: pygame.Surface, camera: Deslocamento, jogador: Jogador) -> None:
         amb = self._ambiente
+        self._direcao_do_jogador = jogador.direcao
         x, y = round(jogador.x) - camera[0], round(jogador.y) - camera[1]
         if amb.condicao_ativa(Condicao.CONGELADO):
             tela.blit(self._bloco_de_gelo, self._bloco_de_gelo.get_rect(midbottom=(x, y + 6)))
         if amb.desafio_da_teia is not None:
-            for dx1, dy1, dx2, dy2 in ((-20, -56, 18, -8), (20, -50, -16, 0), (-22, -30, 22, -28), (0, -62, 2, 4)):
-                pygame.draw.line(tela, (230, 230, 240), (x + dx1, y + dy1), (x + dx2, y + dy2), 1)
+            if amb.envenenado:
+                for i in range(4):  # bolhas de veneno
+                    k = (self._tempo * 1.2 + i / 4) % 1.0
+                    pygame.draw.circle(tela, (120, 230, 80), (x - 12 + i * 8, y - 30 - round(30 * k)), 2 + round(2 * k), 1)
+            else:
+                for dx1, dy1, dx2, dy2 in ((-20, -56, 18, -8), (20, -50, -16, 0), (-22, -30, 22, -28), (0, -62, 2, 4)):
+                    pygame.draw.line(tela, (230, 230, 240), (x + dx1, y + dy1), (x + dx2, y + dy2), 1)
             self._desenhar_setas_da_teia(tela, x, y - 92)
         if amb.condicao_ativa(Condicao.QUEIMANDO):  # pegando fogo: chamas no corpo todo
             for dx, escala, fase in ((-9, 0.75, 0.0), (9, 0.75, 2.0), (0, 1.15, 4.0)):
@@ -272,6 +326,130 @@ class DesenhoDoAmbiente:
                 ny = y - 66 - 40 * k
                 pygame.draw.circle(tela, (160, 240, 200), (round(nx), round(ny)), 3)
                 pygame.draw.line(tela, (160, 240, 200), (nx + 3, ny), (nx + 3, ny - 10), 2)
+        self._desenhar_itens_no_jogador(tela, x, y)
+        self._desenhar_espuma(tela, camera)
+
+    def _desenhar_itens_no_jogador(self, tela: pygame.Surface, x: int, y: int) -> None:
+        amb = self._ambiente
+        if amb.condicao_ativa(Condicao.BROCA):
+            self._desenhar_broca_na_mao(tela, x, y)
+        if amb.condicao_ativa(Condicao.BOTA):  # brilho de obsidiana nos pes
+            for dx in (-7, 7):
+                pygame.draw.ellipse(tela, (40, 20, 50), (x + dx - 6, y - 4, 12, 7))
+                pygame.draw.ellipse(tela, (200, 90, 255), (x + dx - 6, y - 4, 12, 7), 1)
+        if amb.condicao_ativa(Condicao.CAPACETE):  # capacete de mineiro com lampada
+            pygame.draw.ellipse(tela, (230, 190, 40), (x - 13, y - 66, 26, 16))
+            pygame.draw.rect(tela, (200, 160, 30), (x - 15, y - 56, 30, 4), border_radius=2)
+            pygame.draw.circle(tela, (255, 250, 200), (x, y - 61), 4)
+        if amb.condicao_ativa(Condicao.GUARDA_CHUVA):
+            topo = y - 82
+            pygame.draw.line(tela, (80, 60, 50), (x + 10, topo + 4), (x + 10, y - 40), 2)
+            pygame.draw.arc(tela, (80, 60, 50), (x + 4, y - 44, 8, 8), math.pi, math.tau, 2)
+            gomos = [(x + 10 - 26 + i * 13, topo + 10) for i in range(5)]
+            pygame.draw.polygon(tela, (220, 60, 80), [(x + 10, topo - 6)] + gomos)
+            for gx, gy in gomos[1:-1]:
+                pygame.draw.line(tela, (150, 30, 50), (x + 10, topo - 6), (gx, gy), 1)
+        if amb.condicao_ativa(Condicao.PIPA):
+            px, py = x + 34 + round(math.sin(self._tempo * 2) * 6), y - 96 + round(math.cos(self._tempo * 3) * 4)
+            pygame.draw.line(tela, (230, 230, 230), (x + 8, y - 30), (px, py + 10), 1)
+            pygame.draw.polygon(tela, (80, 170, 240), [(px, py - 10), (px + 8, py), (px, py + 10), (px - 8, py)])
+            pygame.draw.line(tela, (250, 230, 90), (px, py - 10), (px, py + 10), 1)
+            pygame.draw.lines(tela, (250, 90, 90), False, [(px, py + 10), (px - 4, py + 16), (px + 3, py + 22)], 1)
+        if amb.condicao_ativa(Condicao.TONTO):  # passarinhos/estrelas girando na cabeca
+            for i in range(3):
+                a = self._tempo * 6 + i * math.tau / 3
+                sx, sy = x + math.cos(a) * 16, y - 66 + math.sin(a) * 5
+                pygame.draw.circle(tela, (255, 230, 90), (round(sx), round(sy)), 3)
+        cargas = amb.cargas_de_parede
+        if cargas and not amb.condicao_ativa(Condicao.BROCA):  # tapete: quantas paredes ainda da para voar
+            for i in range(cargas):
+                img = icone(TipoDeItem.TAPETE, 14)
+                tela.blit(img, (x - 7 * cargas + i * 15, y - 104))
+
+    # Onde a mao segura a broca e para onde ela aponta (graus), conforme o jogador esta virado
+    MAO_DA_BROCA = {Direcao.DIREITA: ((13, -22), 0), Direcao.ESQUERDA: ((-13, -22), 180),
+                    Direcao.BAIXO: ((11, -16), 90), Direcao.CIMA: ((11, -30), -90)}
+
+    def _desenhar_broca_na_mao(self, tela: pygame.Surface, x: int, y: int) -> None:
+        """Broca de verdade na mao: corpo amarelo, ponta de aco com espiral girando (rapido ao perfurar)."""
+        amb = self._ambiente
+        perfurando = amb.perfuracao is not None
+        (mx, my), graus = self.MAO_DA_BROCA[self._direcao_do_jogador]
+        cx, cy = x + mx, y + my
+        if perfurando:
+            cx += round(math.sin(self._tempo * 70) * 2)
+            cy += round(math.cos(self._tempo * 55) * 1.5)
+        a = math.radians(graus)
+        c, s = math.cos(a), math.sin(a)
+
+        def p(px: float, py: float) -> tuple[float, float]:
+            return cx + px * c - py * s, cy + px * s + py * c
+
+        escuro, amarelo, claro = (60, 40, 10), (235, 180, 40), (255, 225, 120)
+        aco, aco_escuro = (190, 195, 210), (95, 100, 118)
+        pygame.draw.polygon(tela, escuro, [p(-3, 4), p(3, 4), p(2, 13), p(-4, 13)])  # cabo
+        pygame.draw.polygon(tela, (40, 30, 30), [p(-2, 5), p(2, 5), p(1, 12), p(-3, 12)])
+        corpo = [p(-9, -6), p(7, -6), p(7, 6), p(-9, 6)]
+        pygame.draw.polygon(tela, amarelo, corpo)
+        pygame.draw.polygon(tela, escuro, corpo, 2)
+        pygame.draw.line(tela, claro, p(-7, -4), p(5, -4), 2)
+        pygame.draw.polygon(tela, aco_escuro, [p(7, -4), p(10, -4), p(10, 4), p(7, 4)])  # mandril
+        ponta = [p(10, -5), p(27, 0), p(10, 5)]
+        pygame.draw.polygon(tela, aco, ponta)
+        giro = (self._tempo * (28 if perfurando else 6)) % 1.0
+        for i in range(4):  # espiral andando = girando
+            k = (i + giro) / 4
+            px = 10 + 17 * k
+            meia = 5 * (1 - k)
+            pygame.draw.line(tela, aco_escuro, p(px, -meia), p(px + 3, meia), 2)
+        pygame.draw.polygon(tela, (40, 40, 52), ponta, 1)
+        if perfurando:  # faiscas na ponta
+            pontaX, pontaY = p(28, 0)
+            for i in range(5):
+                ang = self._tempo * 40 + i * 1.3
+                comprimento = 4 + (i * 7 + int(self._tempo * 30)) % 6
+                pygame.draw.line(tela, (255, 230, 120), (pontaX, pontaY),
+                                 (pontaX + math.cos(ang) * comprimento, pontaY + math.sin(ang) * comprimento), 1)
+
+    def _desenhar_parede_quebrando(self, tela: pygame.Surface, camera: Deslocamento) -> None:
+        """Rachaduras crescendo na parede que a broca esta furando + entulho caindo."""
+        perfuracao = self._ambiente.perfuracao
+        if perfuracao is None:
+            return
+        tile, progresso = perfuracao
+        t = self._tile
+        x0, y0 = tile.coluna * t - camera[0], tile.linha * t - camera[1]
+        cx, cy = x0 + t // 2, y0 + t // 2
+        sombra = pygame.Surface((t, t), pygame.SRCALPHA)
+        sombra.fill((0, 0, 0, int(110 * progresso)))
+        tela.blit(sombra, (x0, y0))
+        for i in range(7):
+            ang = i * 0.9 + 0.4
+            comprimento = (t * 0.55) * min(1.0, progresso * 1.4) * (0.6 + 0.4 * ((i * 37) % 10) / 10)
+            meio = (cx + math.cos(ang + 0.3) * comprimento * 0.5, cy + math.sin(ang + 0.3) * comprimento * 0.5)
+            fim = (cx + math.cos(ang) * comprimento, cy + math.sin(ang) * comprimento)
+            pygame.draw.lines(tela, (25, 18, 14), False, [(cx, cy), meio, fim], 3)
+            pygame.draw.lines(tela, (255, 190, 90), False, [(cx, cy), meio, fim], 1)
+        for i in range(8):  # pedrinhas caindo
+            k = (self._tempo * 2.2 + i / 8) % 1.0
+            px = cx + ((i * 23) % t) - t // 2
+            py = cy - 6 + k * t * 0.7
+            tela.fill((120, 105, 95), (round(px), round(py), 3, 3))
+
+    def _desenhar_espuma(self, tela: pygame.Surface, camera: Deslocamento) -> None:
+        extintor = self._ambiente.extintor
+        if extintor is None:
+            return
+        ex, ey, momento = extintor
+        k = (self._ambiente.tempo - momento) / 0.8
+        if not 0 <= k < 1:
+            return
+        raio = self._tile * 3 * min(1.0, k * 2)
+        for i in range(16):
+            a = i * math.tau / 16 + i
+            r = raio * (0.5 + 0.5 * ((i * 7) % 5) / 4)
+            cx, cy = ex - camera[0] + math.cos(a) * r, ey - camera[1] - 10 + math.sin(a) * r * 0.6
+            pygame.draw.circle(tela, (235, 245, 255), (round(cx), round(cy)), round(10 * (1 - k)) + 2)
 
     # ------------------------------------------------------------------
     # Camada sobre a escuridao
@@ -301,6 +479,32 @@ class DesenhoDoAmbiente:
                 tela.blit(halo, (cx - r, cy - r), special_flags=pygame.BLEND_RGB_ADD)
         if amb.condicao_ativa(Condicao.BUSSOLA):
             self._desenhar_bussola(tela, camera, jogador)
+        self._desenhar_rastros_brilhando(tela, camera)
+        self._desenhar_melhor_caminho(tela, camera)
+
+    def _desenhar_rastros_brilhando(self, tela: pygame.Surface, camera: Deslocamento) -> None:
+        lavas = [p for p in self._ambiente.rastros if p.tipo is TipoDePerigo.LAVA]
+        if not lavas:
+            return
+        r = self._halo_do_fogo.get_width() // 2
+        halo = self._halo_do_fogo.copy()
+        halo.fill((150, 150, 150), special_flags=pygame.BLEND_RGB_MULT)
+        for lava in lavas:
+            tela.blit(halo, (lava.centro[0] - camera[0] - r, lava.centro[1] - camera[1] - r),
+                      special_flags=pygame.BLEND_RGB_ADD)
+
+    def _desenhar_melhor_caminho(self, tela: pygame.Surface, camera: Deslocamento) -> None:
+        """Desejo do genio: setas douradas no chao, do jogador ate o portal (aparecem ate no escuro)."""
+        trajeto = self._ambiente.melhor_caminho
+        t = self._tile
+        for i, (a, b) in enumerate(zip(trajeto, trajeto[1:])):
+            dx, dy = b.coluna - a.coluna, b.linha - a.linha
+            direcao = {(0, -1): Direcao.CIMA, (0, 1): Direcao.BAIXO, (-1, 0): Direcao.ESQUERDA,
+                       (1, 0): Direcao.DIREITA}[(dx, dy)]
+            cx, cy = a.coluna * t + t // 2 - camera[0], a.linha * t + t // 2 - camera[1]
+            onda = 0.5 + 0.5 * math.sin(self._tempo * 8 - i * 0.6)
+            pygame.draw.circle(tela, (90, 60, 10), (cx, cy), 12)
+            self._desenhar_seta(tela, (cx, cy), direcao, (255, round(200 + 55 * onda), round(60 + 120 * onda)))
 
     def _desenhar_bussola(self, tela: pygame.Surface, camera: Deslocamento, jogador: Jogador) -> None:
         sx, sy = jogador.x - camera[0], jogador.y - camera[1] - 24

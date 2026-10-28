@@ -38,7 +38,7 @@ class Locomocao:
     escorregadio: quanto menor, mais o personagem "patina" (gelo).
     """
 
-    multiplicador: float = 1.0       # banana/cafe aceleram; tempestade/areia freiam
+    multiplicador: float = 1.0       # cafe acelera; tempestades/areia freiam
     aderencia: float | None = None
     travado: bool = False            # congelado ou preso na teia
     invertido: bool = False          # terremoto: controles trocados

@@ -37,12 +37,15 @@ def _blusa(s: pygame.Surface) -> None:
     pygame.draw.arc(s, listra, (12, 4, 8, 7), math.pi, 2 * math.pi, 2)  # gola
 
 
-def _banana(s: pygame.Surface) -> None:
-    pygame.draw.arc(s, (120, 90, 20), (3, -6, 30, 32), math.pi * 1.05, math.pi * 1.85, 9)
-    pygame.draw.arc(s, (250, 215, 60), (3, -6, 30, 32), math.pi * 1.05, math.pi * 1.85, 7)
-    pygame.draw.arc(s, (255, 245, 160), (6, -4, 25, 27), math.pi * 1.2, math.pi * 1.6, 2)
-    pygame.draw.circle(s, (90, 60, 20), (5, 14), 2)
-    pygame.draw.circle(s, (90, 60, 20), (29, 12), 2)
+def _coracao(s: pygame.Surface) -> None:
+    contorno, vermelho, brilho = (120, 20, 35), (230, 50, 70), (255, 190, 200)
+    pontos = [(16, 29), (4, 17), (2, 11), (4, 6), (9, 3), (13, 4), (16, 8), (19, 4), (23, 3), (28, 6), (30, 11),
+              (28, 17)]
+    pygame.draw.polygon(s, vermelho, pontos)
+    pygame.draw.polygon(s, contorno, pontos, 2)
+    pygame.draw.circle(s, brilho, (9, 9), 3)
+    pygame.draw.line(s, (255, 255, 255), (22, 13), (22, 21), 3)  # "+"
+    pygame.draw.line(s, (255, 255, 255), (18, 17), (26, 17), 3)
 
 
 def _mola(s: pygame.Surface) -> None:
@@ -86,14 +89,22 @@ _cache_extra: dict[tuple[str, int], pygame.Surface] = {}
 
 # Nome e descricao curta de cada buff (roleta, HUD e modo apresentacao)
 DESCRICOES_DOS_ITENS: dict[TipoDeItem, tuple[str, str]] = {
-    TipoDeItem.BLUSA: ("BLUSA", "NAO CONGELA NA AGUA NEM DESLIZA NO GELO (10S)"),
-    TipoDeItem.BANANA: ("BANANA", "+50% DE VELOCIDADE (5S)"),
-    TipoDeItem.FLAUTA: ("FLAUTA", "APAGA O FOGO E ACALMA A TEMPESTADE (8S)"),
+    TipoDeItem.BLUSA: ("BLUSA", "NAO CONGELA NEM DESLIZA NO GELO (10S)"),
+    TipoDeItem.FLAUTA: ("FLAUTA", "ACALMA A TEMPESTADE E OS MONSTROS DORMEM (8S)"),
     TipoDeItem.RELOGIO: ("RELOGIO", "+10 SEGUNDOS NO RELOGIO"),
-    TipoDeItem.LANTERNA: ("LANTERNA", "+60% DE VISAO (12S)"),
-    TipoDeItem.ESTRELA: ("ESTRELA", "IMUNE A TODOS OS DEBUFFS (6S)"),
+    TipoDeItem.LANTERNA: ("LANTERNA", "+60% DE VISAO E A ARANHA FOGE (12S)"),
+    TipoDeItem.ESTRELA: ("ESTRELA", "IMUNE A DEBUFFS E MONSTROS (6S)"),
     TipoDeItem.BUSSOLA: ("BUSSOLA", "SETA APONTANDO A SAIDA (15S)"),
     TipoDeItem.CAFE: ("CAFE", "+30% DE VELOCIDADE E SEM LENTIDAO (8S)"),
+    TipoDeItem.CORACAO: ("CORACAO", "+1 CORACAO (COM A VIDA CHEIA, SOME)"),
+    TipoDeItem.EXTINTOR: ("EXTINTOR", "APAGA FOGO E LAVA EM VOLTA. MAGMAN VIRA PEDRA"),
+    TipoDeItem.BOTA: ("BOTA", "BOTA DE OBSIDIANA: IMUNE A FOGO E LAVA (8S)"),
+    TipoDeItem.GUARDA_CHUVA: ("GUARDA-CHUVA", "IMUNE A VENTO, TORNADO E AGUIA (10S)"),
+    TipoDeItem.PIPA: ("PIPA", "O VENTO E O TORNADO LEVAM PARA O PORTAL (12S)"),
+    TipoDeItem.TAPETE: ("TAPETE", "FLUTUA (8S) E VOA POR CIMA DE 1 PAREDE"),
+    TipoDeItem.GENIO: ("GENIO", "ESCOLHA 1 DE 3 DESEJOS"),
+    TipoDeItem.BROCA: ("BROCA", "QUEBRA ATE 2 PAREDES DE VERDADE (15S)"),
+    TipoDeItem.CAPACETE: ("CAPACETE", "SEM TERREMOTO, +LUZ, IMUNE A TOUPEIRA E GOLEM"),
 }
 
 
@@ -151,13 +162,94 @@ def _cafe(s: pygame.Surface) -> None:
     pygame.draw.rect(s, (170, 170, 185), (6, 11, 18, 18), 1, border_radius=4)
 
 
+def _extintor(s: pygame.Surface) -> None:
+    pygame.draw.rect(s, (130, 20, 20), (9, 8, 13, 22), border_radius=4)
+    pygame.draw.rect(s, (220, 40, 40), (10, 9, 11, 20), border_radius=4)
+    pygame.draw.rect(s, (245, 240, 230), (11, 15, 9, 6))
+    pygame.draw.rect(s, (60, 60, 70), (12, 4, 7, 5), border_radius=1)
+    pygame.draw.lines(s, (40, 40, 45), False, [(18, 5), (25, 4), (29, 9)], 2)  # mangueira
+    for i in range(3):  # jato de espuma
+        pygame.draw.circle(s, (235, 245, 255), (28 + i, 12 + i * 3), 2)
+
+
+def _bota(s: pygame.Surface) -> None:
+    contorno = [(9, 4), (19, 4), (19, 20), (29, 23), (29, 29), (6, 29), (6, 20), (9, 18)]
+    pygame.draw.polygon(s, (45, 25, 60), contorno)
+    pygame.draw.polygon(s, (190, 90, 255), contorno, 2)
+    pygame.draw.line(s, (255, 150, 60), (8, 25), (28, 25), 2)  # brilho de lava na sola
+    pygame.draw.line(s, (120, 70, 160), (11, 8), (16, 8), 2)
+
+
+def _guarda_chuva(s: pygame.Surface) -> None:
+    gomos = [(2, 16), (9, 13), (16, 16), (23, 13), (30, 16)]
+    pygame.draw.polygon(s, (220, 60, 80), [(16, 3)] + gomos)
+    for gx, gy in gomos[1:-1]:
+        pygame.draw.line(s, (150, 30, 50), (16, 3), (gx, gy), 1)
+    pygame.draw.line(s, (90, 70, 60), (16, 15), (16, 27), 2)
+    pygame.draw.arc(s, (90, 70, 60), (10, 24, 7, 7), math.pi, math.tau, 2)
+
+
+def _pipa(s: pygame.Surface) -> None:
+    pygame.draw.polygon(s, (80, 170, 240), [(14, 2), (25, 12), (14, 24), (3, 12)])
+    pygame.draw.polygon(s, (40, 90, 160), [(14, 2), (25, 12), (14, 24), (3, 12)], 2)
+    pygame.draw.line(s, (250, 230, 90), (14, 2), (14, 24), 1)
+    pygame.draw.line(s, (250, 230, 90), (3, 12), (25, 12), 1)
+    pygame.draw.lines(s, (250, 90, 90), False, [(14, 24), (18, 27), (15, 30), (21, 31)], 2)
+
+
+def _tapete(s: pygame.Surface) -> None:
+    pontos = [(3 + i * 2, 10 + round(math.sin(i * 0.6) * 2)) for i in range(14)]
+    base = [(x + 1, y + 13) for x, y in reversed(pontos)]
+    pygame.draw.polygon(s, (120, 40, 140), pontos + base)
+    pygame.draw.lines(s, (240, 200, 80), False, pontos, 2)
+    pygame.draw.lines(s, (240, 200, 80), False, base, 2)
+    pygame.draw.circle(s, (240, 200, 80), (16, 17), 3)
+    for x, y in base[::3]:
+        pygame.draw.line(s, (240, 200, 80), (x, y), (x, y + 3), 1)
+
+
+def _genio(s: pygame.Surface) -> None:
+    for i in range(3):  # fumaca magica
+        pygame.draw.circle(s, (150, 120, 230), (12 + i * 4, 10 - i * 3), 4 - i)
+    pygame.draw.ellipse(s, (150, 100, 20), (4, 18, 24, 11))
+    pygame.draw.ellipse(s, (240, 190, 60), (5, 18, 22, 9))
+    pygame.draw.polygon(s, (240, 190, 60), [(26, 21), (31, 17), (30, 21), (27, 24)])  # bico
+    pygame.draw.arc(s, (200, 150, 40), (1, 19, 8, 8), math.pi / 2, math.pi * 1.5, 2)    # alca
+    pygame.draw.ellipse(s, (255, 230, 140), (11, 15, 9, 4))
+
+
+def _broca(s: pygame.Surface) -> None:
+    pygame.draw.rect(s, (230, 170, 40), (2, 12, 12, 9), border_radius=2)        # corpo
+    pygame.draw.rect(s, (120, 80, 20), (5, 20, 5, 9), border_radius=1)          # cabo
+    pygame.draw.polygon(s, (170, 175, 190), [(14, 10), (31, 16), (14, 23)])     # ponta
+    for x in (17, 21, 25):
+        pygame.draw.line(s, (90, 95, 110), (x, 12 + (x - 14) // 3), (x + 2, 21 - (x - 14) // 3), 1)
+
+
+def _capacete(s: pygame.Surface) -> None:
+    pygame.draw.ellipse(s, (230, 190, 40), (4, 8, 24, 22))
+    pygame.draw.rect(s, (0, 0, 0, 0), (0, 21, 32, 11))
+    pygame.draw.rect(s, (200, 160, 30), (2, 19, 28, 5), border_radius=2)
+    pygame.draw.circle(s, (120, 120, 130), (16, 13), 5)
+    pygame.draw.circle(s, (255, 250, 200), (16, 13), 3)
+    pygame.draw.polygon(s, (255, 250, 200, 140), [(16, 13), (30, 4), (31, 13)])
+
+
 _DESENHOS: dict[TipoDeItem, Callable[[pygame.Surface], None]] = {
     TipoDeItem.BLUSA: _blusa,
-    TipoDeItem.BANANA: _banana,
     TipoDeItem.FLAUTA: _flauta,
     TipoDeItem.RELOGIO: _relogio,
     TipoDeItem.LANTERNA: _lanterna,
     TipoDeItem.ESTRELA: _estrela,
     TipoDeItem.BUSSOLA: _bussola,
     TipoDeItem.CAFE: _cafe,
+    TipoDeItem.CORACAO: _coracao,
+    TipoDeItem.EXTINTOR: _extintor,
+    TipoDeItem.BOTA: _bota,
+    TipoDeItem.GUARDA_CHUVA: _guarda_chuva,
+    TipoDeItem.PIPA: _pipa,
+    TipoDeItem.TAPETE: _tapete,
+    TipoDeItem.GENIO: _genio,
+    TipoDeItem.BROCA: _broca,
+    TipoDeItem.CAPACETE: _capacete,
 }

@@ -119,6 +119,12 @@ class BancoDeSons:
             Efeito.PREMIO: self._premio,
             Efeito.SEGREDO: self._segredo,
             Efeito.ERRO: self._erro,
+            Efeito.MONSTRO: self._monstro,
+            Efeito.MAGIA: self._magia,
+            Efeito.GUINCHO: self._guincho,
+            Efeito.SIBILO: self._sibilo,
+            Efeito.BROCA: self._broca,
+            Efeito.EXTINTOR: self._extintor,
         }
 
     def efeitos(self) -> dict[Efeito, pygame.mixer.Sound]:
@@ -256,6 +262,36 @@ class BancoDeSons:
     def _premio(self) -> pygame.mixer.Sound:
         return self._arpejo([("C", 5), ("E", 5), ("G", 5), ("C", 6), ("E", 6)], 0.06, 0.14,
                             FormaDeOnda.QUADRADA, 0.55)
+
+    def _monstro(self) -> pygame.mixer.Sound:
+        """Rugido grave + pancada."""
+        s = self._sint
+        return self._para_sound(s.mixar(0.5, [
+            (0, s.onda(110, 0.45, 0.4, FormaDeOnda.QUADRADA, 55)),
+            (0, s.onda(0, 0.2, 0.3, FormaDeOnda.RUIDO))]), 0.6)
+
+    def _magia(self) -> pygame.mixer.Sound:
+        notas = [("C", 6), ("G", 5), ("E", 6), ("B", 5), ("G", 6)]
+        return self._arpejo(notas, 0.05, 0.2, FormaDeOnda.SENO, 0.6)
+
+    def _guincho(self) -> pygame.mixer.Sound:
+        return self._para_sound(self._sint.onda(1800, 0.35, 0.25, FormaDeOnda.TRIANGULO, 900), 0.45)
+
+    def _sibilo(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.5, [(0, s.onda(0, 0.5, 0.25, FormaDeOnda.RUIDO))]), 0.4)
+
+    def _broca(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.5, [
+            (0, s.onda(220, 0.5, 0.25, FormaDeOnda.QUADRADA, 260)),
+            (0, s.onda(0, 0.5, 0.15, FormaDeOnda.RUIDO))]), 0.5)
+
+    def _extintor(self) -> pygame.mixer.Sound:
+        s = self._sint
+        return self._para_sound(s.mixar(0.7, [
+            (0, s.onda(0, 0.7, 0.3, FormaDeOnda.RUIDO)),
+            (0, s.onda(2500, 0.5, 0.05, FormaDeOnda.SENO, 1800))]), 0.5)
 
     def _segredo(self) -> pygame.mixer.Sound:
         """Fanfarra de "codigo secreto" + explosao."""

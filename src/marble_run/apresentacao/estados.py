@@ -74,6 +74,10 @@ class ContextoDoJogo(ABC):
     def abrir_roleta(self, jogando: EstadoJogando, premio: TipoDeItem) -> None: ...
 
     @abstractmethod
+    def abrir_desejos(self, jogando: EstadoJogando) -> None:
+        """Genio da lampada: escolher 1 de 3 desejos."""
+
+    @abstractmethod
     def abrir_ranking(self, retorno: Estado) -> None: ...
 
     @abstractmethod
@@ -165,8 +169,12 @@ class EstadoJogando(Estado):
             self._jogo.mudar_estado(EstadoDerrota(self._jogo, self._partida, self._cena, self))
         else:
             caixas = [o for o in self._partida.ocorrencias if o.tipo is TipoDeOcorrencia.CAIXA_ABERTA]
+            genio = [o for o in self._partida.ocorrencias
+                     if o.tipo is TipoDeOcorrencia.BUFF_APLICADO and o.item is TipoDeItem.GENIO]
             if caixas:
                 self._jogo.abrir_roleta(self, caixas[0].item)
+            elif genio:
+                self._jogo.abrir_desejos(self)
 
     def desenhar(self, tela: pygame.Surface) -> None:
         self._cena.desenhar(tela, com_escuridao=self._servicos.preferencias.escuridao)
@@ -204,9 +212,11 @@ class EstadoVitoria(Estado):
             proximo = f"Proximo: {nome_do_mapa(fase.tema)} {fase.etapa_no_mapa + 1}/{fase.fases_por_mapa}"
         self._cena.desenhar(tela, com_escuridao=False)
         self._servicos.hud.desenhar(tela, self._partida)
+        cura = self._partida.dificuldade.cura_por_fase
         self._servicos.painel.desenhar(
             tela, "SAIU DO LABIRINTO!",
-            f"+{resultado.pontos_ganhos} pontos  (bonus de tempo: {resultado.bonus})  +1 coracao", proximo)
+            f"+{resultado.pontos_ganhos} pontos  (bonus de tempo: {resultado.bonus})"
+            + (f"  +{cura} coracao" if cura else "  (sem cura nesta dificuldade)"), proximo)
 
 
 class EstadoDerrota(Estado):

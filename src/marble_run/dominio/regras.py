@@ -39,41 +39,58 @@ class Dificuldade:
     """
 
     fases_tranquilas: int = 3
-    fase_mais_dificil: int = 12
+    fase_mais_dificil: int = 10
     colunas_maximas: int = 30
     linhas_maximas: int = 20
-    fator_tempo_tranquilo: float = 4.0    # tempo = (tempo do caminho perfeito) x fator ...
-    fator_tempo_final: float = 1.5        # ... que cai ate x 1.5
-    tempo_extra_tranquilo: float = 20.0   # segundos de folga ...
-    tempo_extra_final: float = 5.0        # ... que caem ate 5
-    raio_visao_tranquilo: float = 9.0     # alcance da luz, em tiles ...
-    raio_visao_final: float = 3.5         # ... que cai ate 3.5
-    perigos_tranquilo: float = 0.35       # quantidade de perigos (x o normal do mapa) ...
-    perigos_final: float = 1.5            # ... que sobe ate x 1.5
-    ritmo_fenomenos_inicial: float = 1.6  # intervalo entre fenomenos (x o normal): raros no comeco ...
+    fator_tempo_tranquilo: float = 2.6    # tempo = (tempo do caminho perfeito) x fator ...
+    fator_tempo_final: float = 1.35       # ... que cai ate x 1.35
+    tempo_extra_tranquilo: float = 12.0   # segundos de folga ...
+    tempo_extra_final: float = 4.0        # ... que caem ate 4
+    raio_visao_tranquilo: float = 7.0     # alcance da luz, em tiles ...
+    raio_visao_final: float = 3.2         # ... que cai ate 3.2
+    perigos_tranquilo: float = 0.6        # quantidade de perigos (x o normal do mapa) ...
+    perigos_final: float = 1.8            # ... que sobe ate x 1.8
+    ritmo_fenomenos_inicial: float = 1.4  # intervalo entre fenomenos (x o normal): raros no comeco ...
     ritmo_fenomenos_final: float = 0.8    # ... e frequentes no fim
     raio_visao_minimo: float = 2.5
-    multiplicador_tempo: float = 1.0      # facil da mais tempo, insano metade
+    multiplicador_tempo: float = 1.0      # facil da mais tempo, insano bem menos
     fator_tempo_absoluto: float = 1.15    # nunca menos que 15% acima do caminho perfeito
     fator_perigos: float = 1.0            # multiplicador do nivel (facil tem menos perigos)
     ritmo_fenomenos: float = 1.0          # multiplicador do nivel (< 1 = mais frequentes)
     ajuste_visao: float = 0.0             # tiles a mais (facil) ou a menos (dificil) de luz
     visao_fixa: float | None = None       # insano: luz sempre pequena
     itens_vetados: tuple[TipoDeItem, ...] = ()
+    fases_com_um_monstro: int = 6         # ate esta fase: 1 monstro; dai em diante 2
+    monstros_extras: int = 0              # insano: +1 monstro
+    maximo_de_monstros: int | None = None  # facil: no maximo 1
+    monstros_agressivos: bool = False     # dificil/insano: atacam mais vezes e andam mais rapido
+    coracoes: int = 3                     # vida maxima
+    cura_por_fase: int = 1                # coracoes devolvidos ao sair do labirinto
+    celulas_extras: int = 0               # labirinto ja comeca maior
     nivel: NivelDeDificuldade = NivelDeDificuldade.NORMAL
 
     @classmethod
     def do_nivel(cls, nivel: NivelDeDificuldade) -> Dificuldade:
         if nivel is NivelDeDificuldade.FACIL:
-            return cls(multiplicador_tempo=1.4, ajuste_visao=1.5, fator_perigos=0.6, ritmo_fenomenos=1.4,
-                       nivel=nivel)
-        if nivel is NivelDeDificuldade.DIFICIL:
-            return cls(multiplicador_tempo=0.75, ajuste_visao=-1.0, fator_perigos=1.4, ritmo_fenomenos=0.75,
-                       nivel=nivel)
-        if nivel is NivelDeDificuldade.INSANO:  # sem luz extra e metade do tempo
-            return cls(multiplicador_tempo=0.5, visao_fixa=3.0, fator_perigos=1.7, ritmo_fenomenos=0.6,
-                       itens_vetados=(TipoDeItem.LANTERNA,), nivel=nivel)
+            return cls(multiplicador_tempo=1.3, ajuste_visao=1.0, fator_perigos=0.75, ritmo_fenomenos=1.2,
+                       maximo_de_monstros=1, nivel=nivel)
+        if nivel is NivelDeDificuldade.DIFICIL:  # monstros desde a fase 3, sem cura ao passar de fase
+            return cls(multiplicador_tempo=0.8, ajuste_visao=-0.8, fator_perigos=1.35, ritmo_fenomenos=0.8,
+                       fator_tempo_absoluto=1.12, fases_tranquilas=2, fases_com_um_monstro=4,
+                       monstros_agressivos=True, cura_por_fase=0, celulas_extras=1, nivel=nivel)
+        if nivel is NivelDeDificuldade.INSANO:  # 2 coracoes, pouca luz, pouco tempo e monstros desde a fase 2
+            return cls(multiplicador_tempo=0.6, visao_fixa=2.4, fator_perigos=1.6, ritmo_fenomenos=0.65,
+                       fator_tempo_absoluto=1.08, fases_tranquilas=1, fases_com_um_monstro=2, monstros_extras=1,
+                       monstros_agressivos=True, itens_vetados=(TipoDeItem.LANTERNA,), coracoes=2,
+                       cura_por_fase=0, celulas_extras=2, nivel=nivel)
         return cls()
+
+    def monstros(self, fase: int) -> int:
+        """Quantos monstros aparecem: nenhum nas fases tranquilas, depois 1 e, mais adiante, 2."""
+        if fase <= self.fases_tranquilas:
+            return 0
+        quantidade = (1 if fase <= self.fases_com_um_monstro else 2) + self.monstros_extras
+        return min(quantidade, self.maximo_de_monstros) if self.maximo_de_monstros else quantidade
 
     # ------------------------------------------------------------------
     def progresso(self, fase: int) -> float:
@@ -87,8 +104,8 @@ class Dificuldade:
     def tamanho(self, fase: int) -> tuple[int, int]:
         """Quantidade de CELULAS (colunas, linhas) do labirinto: pequeno no comeco, cresce mais rapido depois."""
         depois_da_calmaria = max(0, fase - self.fases_tranquilas)
-        colunas = min(7 + (fase - 1) + depois_da_calmaria // 2, self.colunas_maximas)
-        linhas = min(5 + (fase - 1) * 2 // 3 + depois_da_calmaria // 3, self.linhas_maximas)
+        colunas = min(7 + self.celulas_extras + (fase - 1) + depois_da_calmaria // 2, self.colunas_maximas)
+        linhas = min(5 + self.celulas_extras + (fase - 1) * 2 // 3 + depois_da_calmaria // 3, self.linhas_maximas)
         return colunas, linhas
 
     def tempo_limite(self, fase: int, distancia: float, velocidade: float) -> float:

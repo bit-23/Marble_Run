@@ -155,13 +155,21 @@ package "dominio" #E8F4FF {
   }
   enum TipoDeItem {
     BLUSA
-    BANANA
     FLAUTA
     RELOGIO
     LANTERNA
     ESTRELA
     BUSSOLA
     CAFE
+    CORACAO
+    EXTINTOR
+    BOTA
+    GUARDA_CHUVA
+    PIPA
+    TAPETE
+    GENIO
+    BROCA
+    CAPACETE
   }
   enum TipoDePerigo {
     AGUA
@@ -169,9 +177,12 @@ package "dominio" #E8F4FF {
     TEIA
     AREIA_MOVEDICA
     GELO
+    LAVA
+    BURACO
   }
   enum Fenomeno {
     TEMPESTADE_DE_AREIA
+    TEMPESTADE_DE_GELO
     APAGAO
     TERREMOTO
     RAJADA

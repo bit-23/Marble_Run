@@ -12,7 +12,7 @@ import random
 from enum import Enum, auto
 from typing import Callable, Mapping, Sequence
 
-from .ambiente import Ambiente, Ocorrencia, TipoDeItem
+from .ambiente import Ambiente, Desejo, HistoricoDaRoleta, Ocorrencia, TipoDeItem
 from .biomas import Bioma
 from .contratos import OuvinteDaPartida
 from .geometria import Vetor2
@@ -102,7 +102,8 @@ class Fase:
 
     def avancar(self, dt: float, intencao: Vetor2) -> bool:
         """Move o jogador, aplica buffs/debuffs e desconta o tempo. Devolve True se for hora de alertar."""
-        self._jogador.mover(intencao, dt, self._labirinto, self._ambiente.locomocao())
+        mapa = self._ambiente.mapa_de_colisao(self._jogador)
+        self._jogador.mover(intencao, dt, mapa, self._ambiente.locomocao())
         for ocorrencia in self._ambiente.atualizar(dt, self._jogador):
             self._registrar(ocorrencia)
         return self._cronometro.avancar(dt)
@@ -110,6 +111,13 @@ class Fase:
     def aplicar_premio(self, tipo: TipoDeItem) -> None:
         """Buff direto, sem caixa (modo teste dos mapas)."""
         self._registrar(self._ambiente.aplicar_premio(tipo))
+
+    def realizar_desejo(self, desejo: Desejo) -> None:
+        """Genio da lampada: o jogador escolheu o desejo na tela do genio."""
+        self._registrar(self._ambiente.realizar_desejo(desejo, self._jogador))
+
+    def ganhar_tempo(self, segundos: float) -> None:
+        self._cronometro.ajustar(segundos)
 
     def apertar(self, direcao: Direcao) -> None:
         """Seta apertada (so conta enquanto esta preso na teia)."""
@@ -152,17 +160,22 @@ class FabricaDeFases:
     LIMITE_SEMENTE = 1_000_000
     ALTURA_DOS_PES = Jogador.ALTURA_DOS_PES
     TAMANHO_DA_VITRINE = (8, 6)
+    TAMANHO_DA_ARENA = (28, 18)  # tiles de chao
     FASES_POR_MAPA = 3
 
     def __init__(self, gerador: GeradorDeLabirinto, dificuldade: Dificuldade,
                  temas: Sequence[str], sorteio: random.Random | None = None,
                  biomas: Mapping[str, Bioma] | None = None, vitrine: bool = False,
-                 fases_por_mapa: int = FASES_POR_MAPA) -> None:
+                 fases_por_mapa: int = FASES_POR_MAPA, gerador_da_arena: GeradorDeLabirinto | None = None,
+                 tamanho_da_arena: tuple[int, int] = TAMANHO_DA_ARENA) -> None:
         if not temas:
             raise ValueError("informe ao menos um tema")
         if fases_por_mapa < 1:
             raise ValueError("fases_por_mapa precisa ser pelo menos 1")
         self._gerador = gerador
+        self._historico = HistoricoDaRoleta()  # a roleta lembra dos premios de uma fase para outra
+        self._gerador_da_arena = gerador_da_arena
+        self._tamanho_da_arena = tamanho_da_arena
         self._dificuldade = dificuldade
         self._temas = tuple(temas)
         self._sorteio = sorteio if sorteio is not None else random.SystemRandom()
@@ -178,6 +191,11 @@ class FabricaDeFases:
     @property
     def vitrine(self) -> bool:
         return self._vitrine
+
+    @property
+    def em_arena(self) -> bool:
+        """Teste dos mapas na ARENA editavel (quadrado aberto) em vez de labirinto."""
+        return self._vitrine and self._gerador_da_arena is not None
 
     @property
     def fases_por_mapa(self) -> int:
@@ -200,10 +218,15 @@ class FabricaDeFases:
         tema = self.tema_da_fase(numero)
         semente = self._sorteio.randrange(self.LIMITE_SEMENTE)
         rng = random.Random(semente)  # mesma semente => mesmo labirinto e itens
-        colunas, linhas = self.TAMANHO_DA_VITRINE if self._vitrine else self._dificuldade.tamanho(numero)
-        labirinto = self._gerador.gerar(colunas, linhas, rng)
         bioma = self._biomas.get(tema, Bioma.neutro())
-        ambiente = bioma.criar_ambiente(labirinto, rng, self._dificuldade, vitrine=self._vitrine, fase=numero)
+        if self.em_arena:  # teste dos mapas: quadrado aberto e editavel, comeca vazio
+            labirinto = self._gerador_da_arena.gerar(*self._tamanho_da_arena, rng)
+            ambiente = bioma.criar_arena(labirinto, rng, self._dificuldade, historico=self._historico)
+        else:
+            colunas, linhas = self.TAMANHO_DA_VITRINE if self._vitrine else self._dificuldade.tamanho(numero)
+            labirinto = self._gerador.gerar(colunas, linhas, rng)
+            ambiente = bioma.criar_ambiente(labirinto, rng, self._dificuldade, vitrine=self._vitrine, fase=numero,
+                                            historico=self._historico)
 
         centro_x, centro_y = labirinto.centro_do_tile(labirinto.entrada)
         jogador = Jogador(centro_x, centro_y + self.ALTURA_DOS_PES)
@@ -238,7 +261,7 @@ class Partida:
     def __init__(self, fabrica: FabricaDeFases, placar: Placar | None = None, vida: Vida | None = None) -> None:
         self._fabrica = fabrica
         self._placar = placar if placar is not None else Placar()
-        self._vida = vida if vida is not None else Vida()
+        self._vida = vida if vida is not None else Vida(fabrica.dificuldade.coracoes)
         self._ouvintes: list[OuvinteDaPartida] = []
         self._fase = fabrica.criar(1)
         self._situacao = SituacaoDaPartida.EM_ANDAMENTO
@@ -274,6 +297,11 @@ class Partida:
         return self._fabrica.vitrine
 
     @property
+    def em_arena(self) -> bool:
+        """Arena editavel: encostar no portal nao encerra a fase (senao perde o que foi montado)."""
+        return self._fabrica.em_arena
+
+    @property
     def situacao(self) -> SituacaoDaPartida:
         return self._situacao
 
@@ -302,6 +330,8 @@ class Partida:
             self._avisar(lambda ouvinte, o=ocorrencia: ouvinte.ao_ocorrer(o))
             if ocorrencia.dano:
                 self._vida.perder(ocorrencia.dano)
+            if ocorrencia.cura:
+                self._curar(ocorrencia.cura)
         if alertar:
             restante = self._fase.tempo_restante
             self._avisar(lambda ouvinte: ouvinte.ao_alertar_tempo(restante))
@@ -311,7 +341,7 @@ class Partida:
                 self._vida.recuperar(self._vida.maximo)
             else:
                 self._encerrar_sem_vida()
-        elif self._fase.jogador_na_saida():
+        elif self._fase.jogador_na_saida() and not self.em_arena:
             self._concluir_fase()
         elif self._fase.tempo_esgotado:
             self._encerrar_por_tempo()
@@ -320,7 +350,7 @@ class Partida:
         if self._situacao is not SituacaoDaPartida.FASE_CONCLUIDA:
             raise RuntimeError("so da para avancar depois de concluir a fase atual")
         self._fase = self._fabrica.criar(self._fase.numero + 1)
-        self._vida.recuperar(1)  # premio por sair do labirinto
+        self._vida.recuperar(self._fabrica.dificuldade.cura_por_fase)  # premio por sair do labirinto
         self._situacao = SituacaoDaPartida.EM_ANDAMENTO
 
     def apertar(self, direcao: Direcao) -> None:
@@ -339,6 +369,10 @@ class Partida:
         self._situacao = SituacaoDaPartida.TEMPO_ESGOTADO
         fase = self._fase.numero
         self._avisar(lambda ouvinte: ouvinte.ao_esgotar_tempo(fase))
+
+    def _curar(self, coracoes: int) -> None:
+        """Coracao bonus: recupera vida. Com a vida cheia ele simplesmente some."""
+        self._vida.recuperar(coracoes)
 
     def _encerrar_sem_vida(self) -> None:
         self._situacao = SituacaoDaPartida.SEM_VIDA

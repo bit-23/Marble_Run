@@ -25,13 +25,30 @@ class SonsDaPartida(OuvinteDaPartida):
         TipoDeOcorrencia.TECLA_CERTA: Efeito.TIQUE,
         TipoDeOcorrencia.TECLA_ERRADA: Efeito.ERRO,
         TipoDeOcorrencia.SOLTOU_DA_TEIA: Efeito.CONFIRMAR,
+        TipoDeOcorrencia.MONSTRO_ATACOU: Efeito.MONSTRO,
+        TipoDeOcorrencia.GOLPE_BLOQUEADO: Efeito.CONFIRMAR,
+        TipoDeOcorrencia.ENVENENOU: Efeito.SIBILO,
+        TipoDeOcorrencia.CUROU_VENENO: Efeito.CONFIRMAR,
+        TipoDeOcorrencia.VENENO_FEZ_EFEITO: Efeito.MONSTRO,
+        TipoDeOcorrencia.ARREMESSADO: Efeito.RAJADA,
+        TipoDeOcorrencia.PUXADO: Efeito.TEIA,
+        TipoDeOcorrencia.ROUBOU_BUFF: Efeito.GUINCHO,
+        TipoDeOcorrencia.CAIU_NO_BURACO: Efeito.TERREMOTO,
+        TipoDeOcorrencia.ATRAVESSOU_TUNEL: Efeito.MAGIA,
+        TipoDeOcorrencia.DESEJO_REALIZADO: Efeito.MAGIA,
+        TipoDeOcorrencia.COMECOU_A_PERFURAR: Efeito.BROCA,
+        TipoDeOcorrencia.QUEBROU_PAREDE: Efeito.TERREMOTO,
     }
     SONS_DOS_ITENS = {
         TipoDeItem.FLAUTA: Efeito.FLAUTA,
         TipoDeItem.RELOGIO: Efeito.RELOGIO,
+        TipoDeItem.GENIO: Efeito.MAGIA,
+        TipoDeItem.EXTINTOR: Efeito.EXTINTOR,
+        TipoDeItem.BROCA: Efeito.BROCA,
     }
     SONS_DOS_FENOMENOS = {
         Fenomeno.TEMPESTADE_DE_AREIA: Efeito.TEMPESTADE,
+        Fenomeno.TEMPESTADE_DE_GELO: Efeito.TEMPESTADE,
         Fenomeno.TERREMOTO: Efeito.TERREMOTO,
         Fenomeno.RAJADA: Efeito.RAJADA,
         Fenomeno.APAGAO: Efeito.APAGAO,
@@ -60,6 +77,8 @@ class SonsDaPartida(OuvinteDaPartida):
     def ao_ocorrer(self, ocorrencia: Ocorrencia) -> None:
         if ocorrencia.tipo is TipoDeOcorrencia.BUFF_APLICADO:
             self._audio.tocar(self.som_do_premio(ocorrencia.item))
+        elif ocorrencia.tipo is TipoDeOcorrencia.ATRAVESSOU_PAREDE:
+            self._audio.tocar(Efeito.MAGIA)
         elif ocorrencia.tipo is TipoDeOcorrencia.FENOMENO_COMECOU:
             efeito = self.SONS_DOS_FENOMENOS.get(ocorrencia.fenomeno)
             if efeito is not None:

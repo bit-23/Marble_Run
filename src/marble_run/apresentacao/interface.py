@@ -53,20 +53,29 @@ class Tipografia:
 # Como cada condicao aparece no HUD: icone do item que a causou ou um rotulo
 ICONE_DA_CONDICAO: dict[Condicao, TipoDeItem] = {
     Condicao.BLUSA: TipoDeItem.BLUSA,
-    Condicao.BANANA: TipoDeItem.BANANA,
     Condicao.CAFE: TipoDeItem.CAFE,
     Condicao.LANTERNA: TipoDeItem.LANTERNA,
     Condicao.ESTRELA: TipoDeItem.ESTRELA,
     Condicao.BUSSOLA: TipoDeItem.BUSSOLA,
     Condicao.CALMARIA: TipoDeItem.FLAUTA,
+    Condicao.BOTA: TipoDeItem.BOTA,
+    Condicao.GUARDA_CHUVA: TipoDeItem.GUARDA_CHUVA,
+    Condicao.PIPA: TipoDeItem.PIPA,
+    Condicao.TAPETE: TipoDeItem.TAPETE,
+    Condicao.BROCA: TipoDeItem.BROCA,
+    Condicao.CAPACETE: TipoDeItem.CAPACETE,
+    Condicao.CAMINHO: TipoDeItem.GENIO,
 }
 ROTULO_DA_CONDICAO: dict[Condicao, tuple[str, Cor]] = {
     Condicao.CONGELADO: ("CONGELADO", (130, 205, 255)),
     Condicao.QUEIMANDO: ("PEGANDO FOGO!", (255, 120, 60)),
+    Condicao.TONTO: ("TONTO! Controles invertidos", (255, 220, 110)),
+    Condicao.CAIDO: ("CAIU NO BURACO!", (220, 170, 110)),
 }
 # (aviso antes de comecar, enquanto acontece)
 TEXTOS_DOS_FENOMENOS: dict[Fenomeno, tuple[str, str]] = {
     Fenomeno.TEMPESTADE_DE_AREIA: ("Uma tempestade de areia se aproxima...", "TEMPESTADE DE AREIA! Voce esta lento"),
+    Fenomeno.TEMPESTADE_DE_GELO: ("O ar esta ficando gelado...", "TEMPESTADE DE GELO! Voce esta lento"),
     Fenomeno.APAGAO: ("As luzes estao tremulando...", "APAGAO!"),
     Fenomeno.TERREMOTO: ("O chao comeca a tremer...", "TERREMOTO! Controles invertidos"),
     Fenomeno.RAJADA: ("O vento esta ficando forte...", "RAJADA DE VENTO!"),
@@ -153,7 +162,17 @@ class Hud:
                 rotulo, cor = ROTULO_DA_CONDICAO[condicao]
                 x = self._etiqueta(tela, x, y, f"{rotulo} {segundos}", cor)
         if ambiente.desafio_da_teia is not None:
-            x = self._etiqueta(tela, x, y, "PRESO NA TEIA! Aperte as setas em ordem", (225, 225, 235))
+            if ambiente.envenenado:
+                texto = f"ENVENENADO! Setas em ordem em {ambiente.veneno_restante:.0f}s"
+                x = self._etiqueta(tela, x, y, texto, (140, 240, 90))
+            else:
+                x = self._etiqueta(tela, x, y, "PRESO NA TEIA! Aperte as setas em ordem", (225, 225, 235))
+        if ambiente.cargas_de_parede:
+            if ambiente.condicao_ativa(Condicao.BROCA):
+                texto = f"BROCA: ande contra uma parede para QUEBRAR ({ambiente.cargas_de_parede})"
+            else:
+                texto = f"TAPETE: ande contra uma parede para voar por cima ({ambiente.cargas_de_parede})"
+            x = self._etiqueta(tela, x, y, texto, (230, 190, 90))
         if ambiente.deslizando:
             x = self._etiqueta(tela, x, y, "DESLIZANDO NO GELO!", (170, 225, 255))
         if ambiente.na_areia:

@@ -25,7 +25,7 @@ from marble_run.apresentacao.servicos import Preferencias, ServicosDoJogo
 from marble_run.apresentacao.sonorizacao import RitmoDePassos, SonsDaPartida
 from marble_run.apresentacao.temas import CatalogoDeTemas
 from marble_run.dominio.biomas import Bioma
-from marble_run.dominio.geradores import GeradorBacktracker
+from marble_run.dominio.geradores import GeradorArena, GeradorBacktracker
 from marble_run.dominio.partida import FabricaDeFases
 from marble_run.dominio.regras import Dificuldade, NivelDeDificuldade, Recorde
 from marble_run.infraestrutura.audio import FabricaDeAudio
@@ -64,8 +64,9 @@ def montar_jogo(tela: pygame.Surface) -> Jogo:
         return FabricaDeFases(GeradorBacktracker(), Dificuldade.do_nivel(nivel), temas.nomes, biomas=biomas)
 
     def apresentacoes(tema: str) -> FabricaDeFases:
-        """Modo apresentacao: um mapa so, labirinto pequeno, sem tempo e tudo perto da entrada."""
-        return FabricaDeFases(GeradorBacktracker(), Dificuldade(), [tema], biomas=biomas, vitrine=True)
+        """Teste dos mapas: ARENA aberta e editavel, sem tempo, com o fenomeno e os itens do mapa."""
+        return FabricaDeFases(GeradorBacktracker(), Dificuldade(), [tema], biomas=biomas, vitrine=True,
+                              gerador_da_arena=GeradorArena())
 
     # Apresentacao
     tipografia = Tipografia()
