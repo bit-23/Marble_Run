@@ -10,7 +10,7 @@
 
  <p align="center">
   <a href="http://marble_run.fedora.internal/">
-    <img  src="https://docusaurus.io/pt-BR/img/docusaurus.svg" alt="Documentação do Marble Run feita com Docusaurus" width="200" height="200" alt="image"S/>
+    <img  src="https://docusaurus.io/pt-BR/img/docusaurus.svg" alt="Documentação do Marble Run feita com Docusaurus" width="400" height="200" alt="image"S/>
   </a>
   <br />
   <a href="https://marble_run.fedora.internal/"><strong>Acesse a documentação do Marble Run</strong></a>
