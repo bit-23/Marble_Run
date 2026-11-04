@@ -3,7 +3,7 @@
 <img width="1354" height="745" alt="image" src="https://github.com/user-attachments/assets/508837eb-a416-4a96-8013-39ac331058d9" />
 
 <p align="center">
-  <img width="600" height="800" alt="image" src="https://docusaurus.io/pt-BR/img/docusaurus.svg" />
+  <img width="800" height="600" alt="image" src="https://docusaurus.io/pt-BR/img/docusaurus.svg" />
 
   <a href="http://marble_run.fedora.internal/">
     <img src="../my-website/static/img/docusaurus.png" alt="Documentação do Marble Run feita com Docusaurus" width="100" />
